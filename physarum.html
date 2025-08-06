@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ITP Physarum Simulation</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background-color: #000;
+        font-family: 'Inter', sans-serif;
+        color: white;
+      }
+      
+      #physarum-container {
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+      }
+      
+      #stats-overlay {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 15px;
+        border-radius: 8px;
+        font-family: monospace;
+        font-size: 12px;
+        z-index: 100;
+        min-width: 200px;
+      }
+      
+      #controls-overlay {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 15px;
+        border-radius: 8px;
+        z-index: 100;
+      }
+      
+      .control-button {
+        display: inline-block;
+        margin: 5px;
+        padding: 8px 12px;
+        background: #333;
+        border: 1px solid #666;
+        border-radius: 4px;
+        color: white;
+        cursor: pointer;
+        font-size: 12px;
+        transition: background 0.2s;
+      }
+      
+      .control-button:hover {
+        background: #555;
+      }
+      
+      .control-button.active {
+        background: #0066cc;
+      }
+      
+      #loading-message {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 1.5em;
+        color: #00ff00;
+        text-align: center;
+      }
+      
+      .concept-legend {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid #444;
+      }
+      
+      .concept-item {
+        display: flex;
+        align-items: center;
+        margin: 3px 0;
+        font-size: 11px;
+      }
+      
+      .concept-color {
+        width: 12px;
+        height: 12px;
+        margin-right: 8px;
+        border-radius: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="physarum-container">
+      <div id="loading-message">
+        Initializing Physarum Simulation...<br>
+        <small>Loading project data and spawning agents</small>
+      </div>
+      
+      <div id="stats-overlay">
+        <div><strong>Physarum Simulation Stats</strong></div>
+        <div>FPS: <span id="fps">0</span></div>
+        <div>Total Agents: <span id="total-agents">0</span></div>
+        <div>Simulation Time: <span id="sim-time">0s</span></div>
+        
+        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444;">
+          <div><strong>Cyclical System:</strong></div>
+          <div>Phase: <span id="current-phase">historical</span></div>
+          <div id="year-container">Year: <span id="current-year">1980</span></div>
+        </div>
+        
+        <div class="concept-legend">
+          <div><strong>Technology Concepts:</strong></div>
+          <div class="concept-item">
+            <div class="concept-color" style="background-color: #ff4444;"></div>
+            <span>AI: <span id="ai-count">0</span> agents</span>
+          </div>
+          <div class="concept-item">
+            <div class="concept-color" style="background-color: #4444ff;"></div>
+            <span>VR: <span id="vr-count">0</span> agents</span>
+          </div>
+          <div class="concept-item">
+            <div class="concept-color" style="background-color: #44ff44;"></div>
+            <span>Privacy: <span id="privacy-count">0</span> agents</span>
+          </div>
+          <div class="concept-item">
+            <div class="concept-color" style="background-color: #ffff44;"></div>
+            <span>Multimedia: <span id="multimedia-count">0</span> agents</span>
+          </div>
+          <div class="concept-item">
+            <div class="concept-color" style="background-color: #ff44ff;"></div>
+            <span>Mobile: <span id="mobile-count">0</span> agents</span>
+          </div>
+        </div>
+      </div>
+      
+      <div id="controls-overlay">
+        <div><strong>Controls</strong></div>
+        <div class="control-button" id="play-pause">⏸️ Pause</div>
+        <div class="control-button" id="reset">🔄 Reset</div>
+        <div class="control-button" id="show-trails">👁️ Trails</div>
+        <div class="control-button" id="show-agents">🦠 Agents</div>
+        <div class="control-button" id="show-projects" style="opacity: 0.5; cursor: not-allowed;">📍 Projects (disabled)</div>
+        <div class="control-button" id="advance-phase">⏭️ Next Phase</div>
+        <br>
+        <div style="margin-top: 10px;">
+          <div style="margin-bottom: 5px;"><strong>Speed:</strong></div>
+          <div class="control-button speed-btn" data-speed="0.5">0.5x</div>
+          <div class="control-button speed-btn active" data-speed="1">1x</div>
+          <div class="control-button speed-btn" data-speed="2">2x</div>
+          <div class="control-button speed-btn" data-speed="4">4x</div>
+        </div>
+      </div>
+    </div>
+    
+    <script type="module" src="/src/physarum-app.ts"></script>
+  </body>
+</html>

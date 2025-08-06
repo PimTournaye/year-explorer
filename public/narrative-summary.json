@@ -1,0 +1,24 @@
+{
+  "totalNarratives": 5,
+  "narrativeTypes": [
+    "propagation",
+    "convergence",
+    "die_off",
+    "resurrection",
+    "mutation"
+  ],
+  "totalCycleDuration": 960,
+  "conceptsCovered": [
+    "artificial-intelligence",
+    "mobile-ubiquitous",
+    "social-networks",
+    "interactive-media",
+    "virtual-reality",
+    "surveillance-privacy"
+  ],
+  "timespan": [
+    1985,
+    2025
+  ],
+  "generatedOn": "2025-07-28T20:46:51.916Z"
+}

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ITP Project Explorer Remote</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        #container {
+            text-align: center;
+            padding: 20px;
+        }
+        input[type="text"] {
+            width: 80%;
+            padding: 15px;
+            font-size: 1.2em;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 1.2em;
+            border: none;
+            border-radius: 8px;
+            background-color: #007aff;
+            color: white;
+            cursor: pointer;
+        }
+        button:active {
+            background-color: #005bb5;
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 1em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Explore a Concept</h1>
+        <input type="text" id="queryInput" placeholder="e.g., virtual reality, art, data...">
+        <button onclick="search()">Search</button>
+        <p id="status"></p>
+    </div>
+
+    <script>
+        const queryInput = document.getElementById('queryInput');
+        const statusElement = document.getElementById('status');
+
+        async function search() {
+            const query = queryInput.value;
+            if (!query) return;
+
+            statusElement.textContent = 'Searching...';
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query }),
+                });
+
+                if (response.ok) {
+                    statusElement.textContent = `Sent "${query}" to the display!`;
+                    queryInput.value = '';
+                } else {
+                    const result = await response.json();
+                    statusElement.textContent = `Error: ${result.error || 'Unknown error'}`;
+                }
+            } catch (error) {
+                statusElement.textContent = 'Failed to connect to the server.';
+                console.error('Search failed:', error);
+            }
+        }
+
+        queryInput.addEventListener('keyup', (event) => {
+            if (event.key === 'Enter') {
+                search();
+            }
+        });
+    </script>
+</body>
+</html>

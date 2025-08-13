@@ -2,11 +2,11 @@ interface Project {
   id: string;
   title: string;
   year: number;
-  text: string;
+  themes: string[];
   embedding: number[];
   x: number;
   y: number;
-  clusterId: number;
+  cluster_id: number;
 }
 
 interface ClusterData {
@@ -51,34 +51,21 @@ interface ClusterInfo {
   isActive: boolean;
 }
 
-interface FlowingAgent {
-  id: string;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  angle: number;
-  sourceCluster: number;
-  targetCluster: number;
-  age: number;
-  maxAge: number;
-  trailStrength: number;
-  color: string;
-}
+import WebGLTrailProcessor from './webgl/WebGLTrailProcessor';
+import type { AgentSpawnData } from './webgl/WebGLTrailProcessor';
 
-interface PathwayTrail {
-  points: Array<{x: number, y: number, strength: number, age: number}>;
-  decay: number;
-}
 
 class OrganicPathways {
   private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
+  private ctx: CanvasRenderingContext2D | null = null;
+  private overlayCanvas: HTMLCanvasElement;
+  private overlayCtx: CanvasRenderingContext2D;
   private gl: WebGLRenderingContext | null = null;
   private useWebGL: boolean = false;
+  private trailProcessor: WebGLTrailProcessor | null = null;
   
-  private width: number;
-  private height: number;
+  private width: number = 0;
+  private height: number = 0;
   
   private data: ClusteredData | null = null;
   private currentYear: number = 1985;
@@ -95,7 +82,7 @@ class OrganicPathways {
   private readonly WINDOW_SIZE = 2; // years for sliding window
   
   // Pathway system
-  private activityThreshold: number = 3;
+  private activityThreshold: number = 1; // Lowered for more pathway activity
   private readonly PATHWAY_COOLDOWN_DURATION = 5; // years
   private pathwayCooldowns: Map<string, {lastTrigger: number, duration: number}> = new Map();
   
@@ -103,16 +90,11 @@ class OrganicPathways {
   private persistentParticles: PersistentParticle[] = [];
   private clusters: Map<number, ClusterInfo> = new Map();
   
-  // Flowing pathway system (physarum-inspired)
-  private flowingAgents: FlowingAgent[] = [];
-  private pathwayTrails: Map<string, PathwayTrail> = new Map();
+  // GPGPU Agent System (replaces CPU FlowingAgent array)
+  // All agent state now managed entirely on GPU
+  private readonly MAX_AGENTS = 1024; // Scalable agent limit
   private readonly AGENT_SPEED = 2;
   private readonly AGENT_LIFESPAN = 400; // frames
-  private readonly TRAIL_DECAY = 0.995;
-  
-  // Sebastian Lague approach: Trail texture
-  private trailCanvas: HTMLCanvasElement;
-  private trailCtx: CanvasRenderingContext2D;
   
   // Visual bounds
   private minX: number = 0;
@@ -130,16 +112,24 @@ class OrganicPathways {
 
   constructor() {
     this.canvas = document.getElementById('canvas') as HTMLCanvasElement;
-    this.ctx = this.canvas.getContext('2d')!;
     
-    // Create trail texture canvas (Sebastian Lague approach)
-    this.trailCanvas = document.createElement('canvas');
-    this.trailCtx = this.trailCanvas.getContext('2d')!;
+    // Create overlay canvas for 2D elements (particles, UI) on top of WebGL
+    this.overlayCanvas = document.createElement('canvas');
+    this.overlayCanvas.style.position = 'absolute';
+    this.overlayCanvas.style.top = '0';
+    this.overlayCanvas.style.left = '0';
+    this.overlayCanvas.style.pointerEvents = 'none';
+    this.overlayCanvas.style.zIndex = '10';
+    this.canvas.parentElement?.appendChild(this.overlayCanvas);
     
-    // Try to initialize WebGL for better performance
-    this.initializeWebGL();
+    this.overlayCtx = this.overlayCanvas.getContext('2d')!;
+    
+    // WebGL trail processing initialization handled in initializeWebGL
     
     this.setupCanvas();
+    
+    // Try to initialize WebGL for better performance (after canvas setup)
+    this.initializeWebGL();
     this.setupControls();
     this.loadData();
     
@@ -150,32 +140,38 @@ class OrganicPathways {
     try {
       console.log('🔍 Attempting WebGL initialization...');
       
-      // Check WebGL support first
-      const canvas = document.createElement('canvas');
-      const glContext = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      // Get WebGL context from main canvas
+      this.gl = this.canvas.getContext('webgl') || this.canvas.getContext('experimental-webgl') as WebGLRenderingContext | null;
       
-      if (!glContext) {
-        throw new Error('WebGL context creation failed');
+      if (!this.gl) {
+        throw new Error('WebGL context creation failed on main canvas');
       }
       
       console.log('✅ WebGL context created successfully');
       console.log('📊 WebGL Info:', {
-        version: glContext.getParameter(glContext.VERSION),
-        vendor: glContext.getParameter(glContext.VENDOR),
-        renderer: glContext.getParameter(glContext.RENDERER)
+        version: this.gl.getParameter(this.gl.VERSION),
+        vendor: this.gl.getParameter(this.gl.VENDOR),
+        renderer: this.gl.getParameter(this.gl.RENDERER)
       });
       
-      this.gl = this.canvas.getContext('webgl') || this.canvas.getContext('experimental-webgl');
-      if (this.gl) {
-        this.useWebGL = true;
-        console.log('✅ WebGL initialized successfully on main canvas');
-        document.getElementById('rendererInfo')!.textContent = 'WebGL';
-      } else {
-        throw new Error('WebGL context failed on main canvas');
-      }
+      this.useWebGL = true;
+      console.log('✅ WebGL initialized successfully on main canvas');
+      
+      // Initialize GPGPU trail processor with agent system
+      this.trailProcessor = new WebGLTrailProcessor(this.gl, this.width, this.height, this.MAX_AGENTS);
+      console.log('✅ GPGPU Trail Processor with Agent System initialized');
+      
+      // Get 2D context for hybrid rendering (particles on top of WebGL)
+      this.ctx = this.canvas.getContext('2d')!;
+      
+      document.getElementById('rendererInfo')!.textContent = 'WebGL';
     } catch (error) {
       console.log('⚠️ WebGL failed, falling back to Canvas 2D:', error);
       this.useWebGL = false;
+      this.trailProcessor = null;
+      
+      // Now get 2D context for fallback
+      this.ctx = this.canvas.getContext('2d')!;
       document.getElementById('rendererInfo')!.textContent = 'Canvas 2D (Fallback)';
     }
   }
@@ -186,17 +182,19 @@ class OrganicPathways {
     
     this.canvas.width = this.width;
     this.canvas.height = this.height;
-    
     this.canvas.style.width = this.width + 'px';
     this.canvas.style.height = this.height + 'px';
     
-    // Setup trail texture canvas
-    this.trailCanvas.width = this.width;
-    this.trailCanvas.height = this.height;
+    // Setup overlay canvas for 2D elements
+    this.overlayCanvas.width = this.width;
+    this.overlayCanvas.height = this.height;
+    this.overlayCanvas.style.width = this.width + 'px';
+    this.overlayCanvas.style.height = this.height + 'px';
     
-    // Initialize trail canvas with black background
-    this.trailCtx.fillStyle = 'black';
-    this.trailCtx.fillRect(0, 0, this.width, this.height);
+    // Resize WebGL trail processor if it exists
+    if (this.trailProcessor) {
+      this.trailProcessor.resize(this.width, this.height);
+    }
     
     if (this.useWebGL && this.gl) {
       this.gl.viewport(0, 0, this.width, this.height);
@@ -232,14 +230,61 @@ class OrganicPathways {
 
   private async loadData(): Promise<void> {
     try {
-      const response = await fetch('./projects-with-embeddings-clustered.json');
+      const response = await fetch('/thesis_analysis_kmeans.json');
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      this.data = await response.json() as ClusteredData;
-      console.log(`🚀 Loaded ${this.data.projects.length} projects and ${this.data.clusters.length} clusters`);
+      const projects = await response.json() as Project[];
+      console.log(`🚀 Loaded ${projects.length} projects`);
+      
+      // Generate clusters from project data
+      const clusterMap = new Map<number, Project[]>();
+      projects.forEach(project => {
+        if (!clusterMap.has(project.cluster_id)) {
+          clusterMap.set(project.cluster_id, []);
+        }
+        clusterMap.get(project.cluster_id)!.push(project);
+      });
+      
+      const clusters: ClusterData[] = [];
+      clusterMap.forEach((clusterProjects, clusterId) => {
+        // Calculate centroid from project positions
+        const centroidX = clusterProjects.reduce((sum, p) => sum + p.x, 0) / clusterProjects.length;
+        const centroidY = clusterProjects.reduce((sum, p) => sum + p.y, 0) / clusterProjects.length;
+        
+        // Get year range
+        const years = clusterProjects.map(p => p.year);
+        const yearRange: [number, number] = [Math.min(...years), Math.max(...years)];
+        
+        // Get top themes (simplified)
+        const allThemes = clusterProjects.flatMap(p => p.themes);
+        const topThemes = [...new Set(allThemes)].slice(0, 3);
+        
+        clusters.push({
+          id: clusterId,
+          centroid768d: [], // Not needed for visualization
+          centroidX,
+          centroidY,
+          projectCount: clusterProjects.length,
+          yearRange,
+          topTerms: topThemes
+        });
+      });
+      
+      // Convert cluster_id to clusterId for compatibility
+      const normalizedProjects = projects.map(p => ({
+        ...p,
+        clusterId: p.cluster_id
+      }));
+      
+      this.data = {
+        projects: normalizedProjects,
+        clusters
+      };
+      
+      console.log(`📊 Generated ${clusters.length} clusters from project data`);
       
       this.calculateBounds();
       this.initializeParticleSystem();
@@ -520,55 +565,97 @@ class OrganicPathways {
     // Render pathway trails
     this.renderPathwayTrails();
     
-    // Render flowing agents
-    this.renderFlowingAgents();
+    // GPU agents not available in Canvas2D fallback mode
+    // (GPGPU system requires WebGL context)
     
     this.ctx.restore();
   }
 
   private renderPathwayTrails(): void {
-    // Sebastian Lague approach: Draw the trail texture to main canvas
-    this.ctx.save();
-    this.ctx.globalCompositeOperation = 'lighter'; // Additive blending for glow effect
-    this.ctx.drawImage(this.trailCanvas, 0, 0);
-    this.ctx.restore();
+    // GPGPU approach: Render trails using GPU trail processor
+    if (this.trailProcessor && this.useWebGL) {
+      this.trailProcessor.renderTrailsToCanvas();
+    }
   }
 
-  private renderFlowingAgents(): void {
-    this.ctx.save();
-    
-    for (const agent of this.flowingAgents) {
-      const lifeProgress = agent.age / agent.maxAge;
-      const alpha = 1 - lifeProgress; // Fade out over time
-      
-      // Main agent particle
-      this.ctx.beginPath();
-      this.ctx.arc(agent.x, agent.y, 3, 0, 2 * Math.PI);
-      this.ctx.fillStyle = agent.color.replace('60%)', `60%, ${alpha})`);
-      this.ctx.fill();
-      
-      // Directional indicator (small tail)
-      const tailLength = 8;
-      const tailX = agent.x - Math.cos(agent.angle) * tailLength;
-      const tailY = agent.y - Math.sin(agent.angle) * tailLength;
-      
-      this.ctx.beginPath();
-      this.ctx.moveTo(agent.x, agent.y);
-      this.ctx.lineTo(tailX, tailY);
-      this.ctx.strokeStyle = agent.color.replace('60%)', `60%, ${alpha * 0.5})`);
-      this.ctx.lineWidth = 1;
-      this.ctx.stroke();
+  private renderGPUAgents(): void {
+    // GPGPU approach: Render all agents directly from GPU state in a single draw call
+    if (this.trailProcessor && this.useWebGL) {
+      this.trailProcessor.renderAgentsToCanvas();
     }
-    
-    this.ctx.restore();
   }
 
   private renderWebGL(): void {
-    if (!this.gl) return;
+    if (!this.gl || !this.trailProcessor) {
+      console.warn('WebGL not available, falling back to Canvas 2D');
+      this.renderCanvas2D();
+      return;
+    }
     
-    // TODO: Implement WebGL shader-based rendering
-    // For now, fall back to Canvas 2D
-    this.renderCanvas2D();
+    // Clear overlay canvas for 2D elements on top of WebGL
+    this.overlayCtx.clearRect(0, 0, this.width, this.height);
+    
+    // Render particles and clusters using overlay canvas (on top of WebGL trails)
+    this.overlayCtx.save();
+    
+    // Render WebGL trails first (background)
+    this.renderPathwayTrails();
+    
+    // Render cluster boundaries (minimal) on overlay
+    for (const cluster of this.clusters.values()) {
+      if (!cluster.isActive) continue;
+      
+      this.overlayCtx.beginPath();
+      this.overlayCtx.arc(cluster.centerX, cluster.centerY, 3, 0, 2 * Math.PI);
+      this.overlayCtx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      this.overlayCtx.fill();
+      
+      // Very subtle cluster outline
+      const radius = Math.sqrt(cluster.density) * 8;
+      this.overlayCtx.beginPath();
+      this.overlayCtx.arc(cluster.centerX, cluster.centerY, radius, 0, 2 * Math.PI);
+      this.overlayCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      this.overlayCtx.lineWidth = 1;
+      this.overlayCtx.stroke();
+    }
+    
+    // Render particles if enabled on overlay
+    if (this.showParticles) {
+      for (const particle of this.persistentParticles) {
+        if (!particle.isActive || particle.alpha < 0.01) continue;
+        
+        const clusterHue = (particle.clusterId * 137.508) % 360;
+        const dynamicAlpha = particle.alpha * (0.8 + Math.sin(particle.phase * 0.3) * 0.2);
+        
+        // Main particle
+        this.overlayCtx.beginPath();
+        this.overlayCtx.arc(particle.currentX, particle.currentY, particle.size, 0, 2 * Math.PI);
+        this.overlayCtx.fillStyle = `hsla(${clusterHue}, 70%, 65%, ${dynamicAlpha})`;
+        this.overlayCtx.fill();
+        
+        // Add breathing glow effect
+        if (particle.alpha > 0.3) {
+          const glowSize = particle.size + Math.sin(particle.phase) * 1;
+          const glowAlpha = dynamicAlpha * 0.3;
+          
+          this.overlayCtx.beginPath();
+          this.overlayCtx.arc(particle.currentX, particle.currentY, glowSize, 0, 2 * Math.PI);
+          this.overlayCtx.fillStyle = `hsla(${clusterHue}, 80%, 80%, ${glowAlpha})`;
+          this.overlayCtx.fill();
+          
+          // Soft outer glow for density effect
+          this.overlayCtx.shadowColor = `hsla(${clusterHue}, 70%, 70%, ${glowAlpha * 0.5})`;
+          this.overlayCtx.shadowBlur = 6;
+          this.overlayCtx.fill();
+          this.overlayCtx.shadowBlur = 0;
+        }
+      }
+    }
+    
+    // Render GPU agents directly on WebGL canvas (not overlay)
+    this.renderGPUAgents();
+    
+    this.overlayCtx.restore();
   }
 
   private updatePerformanceStats(): void {
@@ -595,179 +682,84 @@ class OrganicPathways {
     yearDisplay.textContent = Math.floor(this.currentYear).toString();
   }
 
-  private spawnFlowingAgents(activities: Array<{sourceCluster: number, targetCluster: number, count: number}>): void {
+  private spawnGPUAgents(activities: Array<{sourceCluster: number, targetCluster: number, count: number}>): void {
+    if (!this.trailProcessor) {
+      console.warn('⚠️ GPGPU processor not available - cannot spawn agents');
+      return;
+    }
+    
+    const agentData: AgentSpawnData[] = [];
+    const currentAgentCount = this.trailProcessor.getActiveAgentCount();
+    let spawnedCount = 0;
+    
     for (const activity of activities) {
       const sourceCluster = this.clusters.get(activity.sourceCluster);
       const targetCluster = this.clusters.get(activity.targetCluster);
       
       if (!sourceCluster || !targetCluster) continue;
       
-      // Spawn limited agents per pathway (as per brief)
-      const agentCount = Math.min(activity.count, 3); // Max 3 agents per pathway
+      // GPGPU can handle many more agents - scale up for performance testing
+      const agentCount = Math.min(activity.count * 10, 50); // Increased significantly for GPGPU
       
       for (let i = 0; i < agentCount; i++) {
+        // Check if we have space for more agents
+        if (currentAgentCount + spawnedCount >= this.trailProcessor.getMaxAgents()) {
+          console.warn(`🚫 Max agents (${this.trailProcessor.getMaxAgents()}) reached`);
+          break;
+        }
+        
         // Start near source cluster with some randomness
         const angle = Math.random() * Math.PI * 2;
         const radius = 20;
         const startX = sourceCluster.centerX + Math.cos(angle) * radius;
         const startY = sourceCluster.centerY + Math.sin(angle) * radius;
         
-        // Calculate initial direction toward target
+        // Calculate initial velocity toward target
         const dx = targetCluster.centerX - startX;
         const dy = targetCluster.centerY - startY;
         const distance = Math.sqrt(dx * dx + dy * dy);
         
-        const agent: FlowingAgent = {
-          id: `${activity.sourceCluster}-${activity.targetCluster}-${Date.now()}-${i}`,
+        const agent: AgentSpawnData = {
           x: startX,
           y: startY,
           vx: (dx / distance) * this.AGENT_SPEED,
           vy: (dy / distance) * this.AGENT_SPEED,
-          angle: Math.atan2(dy, dx),
-          sourceCluster: activity.sourceCluster,
-          targetCluster: activity.targetCluster,
+          targetClusterX: targetCluster.centerX,
+          targetClusterY: targetCluster.centerY,
           age: 0,
-          maxAge: this.AGENT_LIFESPAN,
-          trailStrength: 1.0,
-          color: this.getClusterColor(activity.sourceCluster)
+          maxAge: this.AGENT_LIFESPAN
         };
         
-        this.flowingAgents.push(agent);
+        agentData.push(agent);
+        spawnedCount++;
       }
+    }
+    
+    if (agentData.length > 0) {
+      // Spawn all agents directly into GPU textures
+      this.trailProcessor.spawnAgents(agentData);
+      console.log(`🧠 Spawned ${agentData.length} agents directly to GPU from ${activities.length} pathway activities`);
     }
   }
 
-  private updateFlowingAgents(): void {
-    this.flowingAgents = this.flowingAgents.filter(agent => {
-      agent.age++;
-      
-      // Remove old agents
-      if (agent.age > agent.maxAge) {
-        return false;
-      }
-      
-      // Physarum-inspired steering behavior
-      this.applyPhysarumSteering(agent);
-      
-      // Move agent
-      agent.x += agent.vx;
-      agent.y += agent.vy;
-      
-      // Deposit trail
-      this.depositTrail(agent);
-      
-      return true;
-    });
-  }
+  // CPU Agent methods removed - all agent processing now handled by GPGPU shaders
+  // updateFlowingAgents() -> replaced by trailProcessor.updateGPU()
+  // applyPhysarumSteering() -> replaced by GPGPU agent_update shader
+  // batchSampleTrailStrength() -> eliminated (no more CPU-GPU synchronization)
 
-  private applyPhysarumSteering(agent: FlowingAgent): void {
-    const targetCluster = this.clusters.get(agent.targetCluster);
-    if (!targetCluster) return;
-    
-    // Sensor angles (left, forward, right)
-    const sensorAngle = Math.PI / 4; // 45 degrees
-    const sensorDistance = 15;
-    
-    const leftAngle = agent.angle - sensorAngle;
-    const rightAngle = agent.angle + sensorAngle;
-    
-    // Sensor positions
-    const sensors = [
-      { // Left sensor
-        x: agent.x + Math.cos(leftAngle) * sensorDistance,
-        y: agent.y + Math.sin(leftAngle) * sensorDistance,
-        angle: leftAngle
-      },
-      { // Forward sensor
-        x: agent.x + Math.cos(agent.angle) * sensorDistance,
-        y: agent.y + Math.sin(agent.angle) * sensorDistance,
-        angle: agent.angle
-      },
-      { // Right sensor
-        x: agent.x + Math.cos(rightAngle) * sensorDistance,
-        y: agent.y + Math.sin(rightAngle) * sensorDistance,
-        angle: rightAngle
+  // depositTrail method removed - now handled by WebGL processor
+
+  private updateGPUSystem(): void {
+    // GPGPU system handles agent update, trail decay, and trail deposition entirely on GPU
+    if (this.trailProcessor && this.useWebGL) {
+      const agentCount = this.trailProcessor.getActiveAgentCount();
+      if (agentCount > 0) {
+        console.log(`🧠 GPGPU update: ${agentCount} agents processing on GPU`);
       }
-    ];
-    
-    // Sample trail strength at sensor positions
-    const sensorReadings = sensors.map(sensor => this.sampleTrailStrength(sensor.x, sensor.y));
-    
-    // Add attraction to target cluster
-    const dx = targetCluster.centerX - agent.x;
-    const dy = targetCluster.centerY - agent.y;
-    const targetDistance = Math.sqrt(dx * dx + dy * dy);
-    const targetAngle = Math.atan2(dy, dx);
-    
-    // Weight target attraction (stronger when far, weaker when close)
-    const targetWeight = Math.min(targetDistance / 200, 1.0) * 0.3;
-    
-    // Add target attraction to sensor readings
-    sensors.forEach((sensor, i) => {
-      const angleDiff = Math.abs(sensor.angle - targetAngle);
-      const attraction = Math.cos(angleDiff) * targetWeight;
-      sensorReadings[i] += attraction;
-    });
-    
-    // Decision making based on sensor readings
-    const [left, forward, right] = sensorReadings;
-    const turnStrength = 0.1;
-    
-    if (forward > left && forward > right) {
-      // Continue forward
-    } else if (left > right) {
-      // Turn left
-      agent.angle -= turnStrength;
-    } else if (right > left) {
-      // Turn right
-      agent.angle += turnStrength;
+      this.trailProcessor.updateGPU();
     } else {
-      // Random turn when confused
-      agent.angle += (Math.random() - 0.5) * turnStrength;
+      console.warn('⚠️ GPGPU processor not available');
     }
-    
-    // Update velocity based on new angle
-    agent.vx = Math.cos(agent.angle) * this.AGENT_SPEED;
-    agent.vy = Math.sin(agent.angle) * this.AGENT_SPEED;
-  }
-
-  private sampleTrailStrength(x: number, y: number): number {
-    // Sebastian Lague approach: Sample the trail texture directly
-    try {
-      const imageData = this.trailCtx.getImageData(Math.floor(x), Math.floor(y), 1, 1);
-      const [r, g, b] = imageData.data;
-      
-      // Convert RGB to brightness (trail strength)
-      const brightness = (r + g + b) / (3 * 255);
-      return brightness;
-    } catch (error) {
-      return 0; // Return 0 if sampling outside canvas bounds
-    }
-  }
-
-  private depositTrail(agent: FlowingAgent): void {
-    // Sebastian Lague approach: Draw directly to trail texture
-    const clusterHue = (agent.sourceCluster * 137.508) % 360;
-    
-    this.trailCtx.save();
-    this.trailCtx.globalCompositeOperation = 'lighter'; // Additive blending
-    this.trailCtx.fillStyle = `hsla(${clusterHue}, 70%, 70%, 0.1)`; // Low opacity deposit
-    
-    // Draw small circle at agent position
-    this.trailCtx.beginPath();
-    this.trailCtx.arc(agent.x, agent.y, 2, 0, 2 * Math.PI);
-    this.trailCtx.fill();
-    
-    this.trailCtx.restore();
-  }
-
-  private updatePathwayTrails(): void {
-    // Sebastian Lague approach: Decay the entire trail texture
-    this.trailCtx.save();
-    this.trailCtx.globalCompositeOperation = 'multiply';
-    this.trailCtx.fillStyle = 'rgba(0, 0, 0, 0.02)'; // Very slight darkening each frame
-    this.trailCtx.fillRect(0, 0, this.width, this.height);
-    this.trailCtx.restore();
   }
 
   private getClusterColor(clusterId: number): string {
@@ -781,10 +773,11 @@ class OrganicPathways {
     // Detect cross-cluster activity for pathways
     const pathwayActivities = this.detectCrossClusterActivity();
     
-    // Create flowing agents for detected pathway activities
-    this.spawnFlowingAgents(pathwayActivities);
-    this.updateFlowingAgents();
-    this.updatePathwayTrails();
+    // Spawn agents directly into GPU textures for detected pathway activities
+    this.spawnGPUAgents(pathwayActivities);
+    
+    // Update GPGPU system (agent logic + trail processing entirely on GPU)
+    this.updateGPUSystem();
     
     if (this.useWebGL) {
       this.renderWebGL();
@@ -824,6 +817,13 @@ class OrganicPathways {
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
       this.animationId = null;
+    }
+  }
+
+  public dispose(): void {
+    this.stopAnimation();
+    if (this.trailProcessor) {
+      this.trailProcessor.dispose();
     }
   }
 }

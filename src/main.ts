@@ -42,12 +42,19 @@ class SemanticGarden {
   private readonly START_YEAR = 1985;
   private readonly END_YEAR = 2025;
   private readonly YEAR_DURATION = 1000; // 10x slower timeline
-  private readonly WINDOW_SIZE = 2; // years for sliding window
+  
+  // Zeitgeist Model - Projects are only active for a limited time window
+  private readonly PROJECT_ACTIVE_WINDOW_YEARS = 5.0; // Projects fade after this period
   
   // Pathway system configuration
   private activityThreshold: number = 1; // Lowered for more pathway activity
   private readonly PATHWAY_COOLDOWN_DURATION = 5; // years
   private pathwayCooldowns: Map<string, {lastTrigger: number, duration: number}> = new Map();
+  
+  // Agent hierarchy configuration
+  private readonly FRONTIER_AGENT_RATIO = 0.15; // 15% of agents are Frontier agents (bright, visible)
+  private readonly ECOSYSTEM_BRIGHTNESS = 0.3; // Dim brightness for background ecosystem agents
+  private readonly FRONTIER_BRIGHTNESS = 1.0; // Full brightness for protagonist Frontier agents
   
   // Agent configuration
   private readonly MAX_AGENTS = 1024; // Scalable agent limit
@@ -190,12 +197,11 @@ class SemanticGarden {
   private detectCrossClusterActivity(): CrossClusterActivity[] {
     if (!this.data || !this.particleSystem) return [];
     
-    // Get projects in current sliding window
-    const windowStart = this.currentYear - this.WINDOW_SIZE / 2;
-    const windowEnd = this.currentYear + this.WINDOW_SIZE / 2;
-    
+    // Zeitgeist Model - Projects are only active within the temporal window
+    // Projects older than PROJECT_ACTIVE_WINDOW_YEARS fade from the simulation
     const projectsInWindow = this.data.projects.filter(p => 
-      p.year >= windowStart && p.year <= windowEnd
+      p.year >= (this.currentYear - this.PROJECT_ACTIVE_WINDOW_YEARS) && 
+      p.year <= this.currentYear
     );
     
     // Group by cluster
@@ -238,8 +244,6 @@ class SemanticGarden {
               lastTrigger: this.currentYear,
               duration: this.PATHWAY_COOLDOWN_DURATION
             });
-            
-            console.log(`🚀 Pathway detected: ${sourceId} ↔ ${targetId} (strength: ${activityStrength})`);
           }
         }
       }
@@ -275,6 +279,21 @@ class SemanticGarden {
         const dy = targetCluster.centerY - startY;
         const distance = Math.sqrt(dx * dx + dy * dy);
         
+        // Randomly assign Frontier vs Ecosystem status
+        const isFrontier = Math.random() < this.FRONTIER_AGENT_RATIO;
+        
+        // Generate narrative label for Frontier agents
+        let label: string | undefined;
+        if (isFrontier) {
+          const labelTemplates = [
+            `seeking: ${targetCluster.id} projects`,
+            `exploring: cluster ${targetCluster.id}`,
+            `connecting: ${sourceCluster.id} → ${targetCluster.id}`,
+            `bridging: innovation domains`
+          ];
+          label = labelTemplates[Math.floor(Math.random() * labelTemplates.length)];
+        }
+        
         const agent: AgentSpawnData = {
           x: startX,
           y: startY,
@@ -283,7 +302,14 @@ class SemanticGarden {
           targetClusterX: targetCluster.centerX,
           targetClusterY: targetCluster.centerY,
           age: 0,
-          maxAge: this.AGENT_LIFESPAN
+          maxAge: this.AGENT_LIFESPAN,
+          // Agent hierarchy properties
+          isFrontier: isFrontier,
+          brightness: isFrontier ? this.FRONTIER_BRIGHTNESS : this.ECOSYSTEM_BRIGHTNESS,
+          // Label data for Frontier agents
+          sourceClusterId: activity.sourceCluster,
+          targetClusterId: activity.targetCluster,
+          label: label
         };
         
         agentData.push(agent);
@@ -307,7 +333,6 @@ class SemanticGarden {
       const agentData = this.createAgentSpawnData(pathwayActivities);
       if (agentData.length > 0) {
         this.gpuSystem.spawnAgents(agentData);
-        console.log(`🧠 Spawned ${agentData.length} agents directly to GPU from ${pathwayActivities.length} pathway activities`);
       }
     }
     
@@ -315,11 +340,13 @@ class SemanticGarden {
     if (this.gpuSystem && this.trailSystem) {
       const agentCount = this.gpuSystem.getActiveAgentCount();
       if (agentCount > 0) {
-        console.log(`🧠 GPGPU update: ${agentCount} agents processing on GPU`);
       }
       
       // Update agents first
       this.gpuSystem.update(this.trailSystem.getTrailTexture());
+      
+      // Update CPU mirrors for Frontier agent labels
+      this.gpuSystem.updateFrontierMirrors();
       
       // Then update trails with agent deposition
       this.trailSystem.update(
@@ -359,6 +386,58 @@ class SemanticGarden {
     // Render particles and clusters using overlay canvas (on top of WebGL)
     this.overlayCtx.save();
     this.particleSystem.render(this.overlayCtx, this.showParticles);
+    this.overlayCtx.restore();
+    
+    // Render Frontier agent labels
+    this.renderFrontierLabels();
+  }
+
+  private renderFrontierLabels(): void {
+    if (!this.gpuSystem) return;
+    
+    const frontierAgents = this.gpuSystem.getFrontierAgentMirrors();
+    if (frontierAgents.length === 0) return;
+    
+    this.overlayCtx.save();
+    
+    // Set label styling
+    this.overlayCtx.font = '12px Arial, sans-serif';
+    this.overlayCtx.textAlign = 'center';
+    this.overlayCtx.textBaseline = 'middle';
+    
+    for (const agent of frontierAgents) {
+      if (!agent.isActive) continue;
+      
+      // Calculate label position (slightly offset from agent)
+      const labelX = agent.x;
+      const labelY = agent.y - 20; // 20px above the agent
+      
+      // Draw label background
+      const textMetrics = this.overlayCtx.measureText(agent.label);
+      const bgWidth = textMetrics.width + 10;
+      const bgHeight = 16;
+      
+      this.overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      this.overlayCtx.fillRect(
+        labelX - bgWidth / 2, 
+        labelY - bgHeight / 2, 
+        bgWidth, 
+        bgHeight
+      );
+      
+      // Draw label text
+      this.overlayCtx.fillStyle = '#FFE066'; // Bright yellow for visibility
+      this.overlayCtx.fillText(agent.label, labelX, labelY);
+      
+      // Draw connection line from label to agent
+      this.overlayCtx.strokeStyle = 'rgba(255, 224, 102, 0.5)';
+      this.overlayCtx.lineWidth = 1;
+      this.overlayCtx.beginPath();
+      this.overlayCtx.moveTo(labelX, labelY + bgHeight / 2);
+      this.overlayCtx.lineTo(agent.x, agent.y - 6); // Connect to agent
+      this.overlayCtx.stroke();
+    }
+    
     this.overlayCtx.restore();
   }
 

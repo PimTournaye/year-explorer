@@ -64,6 +64,26 @@ export interface AgentSpawnData {
   targetClusterY: number;
   age: number;
   maxAge: number;
+  // Hierarchy properties
+  isFrontier: boolean; // true = Frontier agent (bright, visible), false = Ecosystem agent (dim)
+  brightness: number; // 0.0-1.0, visual prominence
+  // Label data (only used for Frontier agents)
+  sourceClusterId?: number;
+  targetClusterId?: number;
+  label?: string; // Narrative label like "seeking: privacy projects"
+}
+
+// CPU Mirror for Frontier agents (for label rendering)
+export interface FrontierAgentMirror {
+  id: number; // Index in GPU texture
+  x: number;
+  y: number;
+  age: number;
+  maxAge: number;
+  sourceClusterId: number;
+  targetClusterId: number;
+  label: string;
+  isActive: boolean;
 }
 
 export interface CrossClusterActivity {

@@ -1,4 +1,4 @@
-import type { AgentSpawnData } from '../data/interfaces';
+import type { AgentSpawnData, FrontierAgentMirror } from '../data/interfaces';
 import { Shader } from '../rendering/Shader';
 import { createFloatTexture, createFramebuffer, createScreenQuad, createBuffer } from '../rendering/utils';
 
@@ -8,15 +8,22 @@ export class GPUSystem {
   private height: number;
 
   // GPU Agent State System - stores agent data in floating point textures  
-  private agentStateTextures: WebGLTexture[] = [];
+  private agentStateTextures: WebGLTexture[] = []; // (posX, posY, velX, velY)
   private agentStateFramebuffers: WebGLFramebuffer[] = [];
+  // Second texture for agent properties (age, maxAge, isFrontier, brightness)
+  private agentPropertiesTextures: WebGLTexture[] = []; 
+  private agentPropertiesFramebuffers: WebGLFramebuffer[] = [];
   private currentAgentSourceIndex: 0 | 1 = 0;
   private agentTextureSize: number = 0; // Square texture size (e.g., 32x32 = 1024 agents)
   private maxAgents: number = 0;
   private activeAgentCount: number = 0;
+  
+  // CPU Mirror System for Frontier agents (for label rendering)
+  private frontierAgentMirrors: Map<number, FrontierAgentMirror> = new Map();
 
   // Shader programs
-  private agentUpdateShader!: Shader; // GPGPU brain shader
+  private agentUpdateShader!: Shader; // GPGPU brain shader for agent state
+  private agentPropertiesShader!: Shader; // GPGPU shader for agent properties update  
   private agentRenderShader!: Shader; // GPU agent rendering
 
   // Buffers
@@ -26,6 +33,7 @@ export class GPUSystem {
   // Uniforms for GPGPU agent update shader
   private agentUpdateUniforms!: {
     uAgentStateTexture: WebGLUniformLocation | null;
+    uAgentPropertiesTexture: WebGLUniformLocation | null;
     uTrailTexture: WebGLUniformLocation | null;
     uCanvasSize: WebGLUniformLocation | null;
     uAgentTextureSize: WebGLUniformLocation | null;
@@ -36,9 +44,16 @@ export class GPUSystem {
     uTurnStrength: WebGLUniformLocation | null;
   };
 
+  // Uniforms for agent properties update shader
+  private agentPropertiesUniforms!: {
+    uAgentPropertiesTexture: WebGLUniformLocation | null;
+    uDeltaTime: WebGLUniformLocation | null;
+  };
+
   // Uniforms for agent rendering
   private agentRenderUniforms!: {
     uAgentStateTexture: WebGLUniformLocation | null;
+    uAgentPropertiesTexture: WebGLUniformLocation | null;
     uAgentTextureSize: WebGLUniformLocation | null;
     uCanvasSize: WebGLUniformLocation | null;
   };
@@ -68,22 +83,32 @@ export class GPUSystem {
     // Create agent state textures (FLOAT textures for precise agent data)
     // Each pixel stores one agent: (posX, posY, velX, velY) in RGBA channels
     for (let i = 0; i < 2; i++) {
-      const texture = createFloatTexture(gl, this.agentTextureSize, this.agentTextureSize);
-      this.agentStateTextures.push(texture);
+      const stateTexture = createFloatTexture(gl, this.agentTextureSize, this.agentTextureSize);
+      this.agentStateTextures.push(stateTexture);
 
       // Create framebuffer for agent state
-      const framebuffer = createFramebuffer(gl, texture);
-      this.agentStateFramebuffers.push(framebuffer);
+      const stateFramebuffer = createFramebuffer(gl, stateTexture);
+      this.agentStateFramebuffers.push(stateFramebuffer);
+      
+      // Create agent properties textures: (age, maxAge, isFrontier, brightness) in RGBA channels
+      const propertiesTexture = createFloatTexture(gl, this.agentTextureSize, this.agentTextureSize);
+      this.agentPropertiesTextures.push(propertiesTexture);
+
+      // Create framebuffer for agent properties
+      const propertiesFramebuffer = createFramebuffer(gl, propertiesTexture);
+      this.agentPropertiesFramebuffers.push(propertiesFramebuffer);
     }
 
     // Initialize agent state textures with zeros (no agents)
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.agentStateFramebuffers[0]);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.agentStateFramebuffers[1]);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    for (let i = 0; i < 2; i++) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.agentStateFramebuffers[i]);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.agentPropertiesFramebuffers[i]);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    }
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
@@ -107,6 +132,7 @@ export class GPUSystem {
       precision highp float;
       varying vec2 v_texCoord;
       uniform sampler2D u_agentStateTexture;
+      uniform sampler2D u_agentPropertiesTexture;
       uniform sampler2D u_trailTexture;
       uniform vec2 u_canvasSize;
       uniform float u_agentTextureSize;
@@ -186,12 +212,50 @@ export class GPUSystem {
       }
     `;
 
-    // Agent rendering vertex shader (renders agents from GPU state)
+    // Agent properties update shader (ages agents and manages hierarchy)
+    const agentPropertiesFragmentSource = `
+      precision highp float;
+      varying vec2 v_texCoord;
+      uniform sampler2D u_agentPropertiesTexture;
+      uniform float u_deltaTime;
+
+      void main() {
+        vec4 properties = texture2D(u_agentPropertiesTexture, v_texCoord);
+        
+        // properties: x=age, y=maxAge, z=isFrontier (0.0/1.0), w=brightness
+        float age = properties.x;
+        float maxAge = properties.y;
+        float isFrontier = properties.z;
+        float brightness = properties.w;
+        
+        // Skip inactive agents
+        if (maxAge < 1.0) {
+          gl_FragColor = properties;
+          return;
+        }
+        
+        // Age the agent
+        float newAge = age + u_deltaTime;
+        
+        // Agent dies when it exceeds maxAge
+        if (newAge > maxAge) {
+          gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
+          return;
+        }
+        
+        gl_FragColor = vec4(newAge, maxAge, isFrontier, brightness);
+      }
+    `;
+
+    // Agent rendering vertex shader (renders agents from GPU state with hierarchy)
     const agentRenderVertexSource = `
       attribute float a_agentIndex;
       uniform sampler2D u_agentStateTexture;
+      uniform sampler2D u_agentPropertiesTexture;
       uniform float u_agentTextureSize;
       uniform vec2 u_canvasSize;
+      varying float v_brightness;
+      varying float v_isFrontier;
       
       void main() {
         // Convert agent index to texture coordinates
@@ -203,29 +267,59 @@ export class GPUSystem {
         vec4 agentState = texture2D(u_agentStateTexture, texCoord);
         vec2 position = agentState.xy;
         
+        // Read agent properties from texture
+        vec4 properties = texture2D(u_agentPropertiesTexture, texCoord);
+        float brightness = properties.w;
+        float isFrontier = properties.z;
+        
+        // Skip inactive agents
+        if (length(position) < 1.0 || properties.y < 1.0) {
+          gl_Position = vec4(-10.0, -10.0, 0.0, 1.0); // Off-screen
+          gl_PointSize = 0.0;
+          v_brightness = 0.0;
+          v_isFrontier = 0.0;
+          return;
+        }
+        
         // Convert to clip space
         vec2 clipPos = (position / u_canvasSize) * 2.0 - 1.0;
         gl_Position = vec4(clipPos, 0.0, 1.0);
-        gl_PointSize = 4.0;
+        
+        // Frontier agents are larger and brighter
+        gl_PointSize = isFrontier > 0.5 ? 6.0 : 3.0;
+        
+        // Pass properties to fragment shader
+        v_brightness = brightness;
+        v_isFrontier = isFrontier;
       }
     `;
 
     const agentRenderFragmentSource = `
       precision mediump float;
+      varying float v_brightness;
+      varying float v_isFrontier;
       
       void main() {
-        // Simple white agents for now
-        gl_FragColor = vec4(1.0, 1.0, 1.0, 0.8);
+        // Frontier agents are bright white/yellow, Ecosystem agents are dim
+        if (v_isFrontier > 0.5) {
+          // Frontier agents - bright and prominent
+          gl_FragColor = vec4(1.0, 0.9, 0.6, v_brightness);
+        } else {
+          // Ecosystem agents - dim and subtle
+          gl_FragColor = vec4(0.7, 0.7, 0.9, v_brightness * 0.6);
+        }
       }
     `;
 
     // Create shader programs
     this.agentUpdateShader = new Shader(gl, quadVertexSource, agentUpdateFragmentSource);
+    this.agentPropertiesShader = new Shader(gl, quadVertexSource, agentPropertiesFragmentSource);
     this.agentRenderShader = new Shader(gl, agentRenderVertexSource, agentRenderFragmentSource);
 
     // Get uniform locations for agent update (GPGPU brain)
     this.agentUpdateUniforms = {
       uAgentStateTexture: this.agentUpdateShader.getUniformLocation('u_agentStateTexture'),
+      uAgentPropertiesTexture: this.agentUpdateShader.getUniformLocation('u_agentPropertiesTexture'),
       uTrailTexture: this.agentUpdateShader.getUniformLocation('u_trailTexture'),
       uCanvasSize: this.agentUpdateShader.getUniformLocation('u_canvasSize'),
       uAgentTextureSize: this.agentUpdateShader.getUniformLocation('u_agentTextureSize'),
@@ -236,9 +330,16 @@ export class GPUSystem {
       uTurnStrength: this.agentUpdateShader.getUniformLocation('u_turnStrength')
     };
 
+    // Get uniform locations for agent properties update
+    this.agentPropertiesUniforms = {
+      uAgentPropertiesTexture: this.agentPropertiesShader.getUniformLocation('u_agentPropertiesTexture'),
+      uDeltaTime: this.agentPropertiesShader.getUniformLocation('u_deltaTime')
+    };
+
     // Get uniform locations for agent rendering
     this.agentRenderUniforms = {
       uAgentStateTexture: this.agentRenderShader.getUniformLocation('u_agentStateTexture'),
+      uAgentPropertiesTexture: this.agentRenderShader.getUniformLocation('u_agentPropertiesTexture'),
       uAgentTextureSize: this.agentRenderShader.getUniformLocation('u_agentTextureSize'),
       uCanvasSize: this.agentRenderShader.getUniformLocation('u_canvasSize')
     };
@@ -265,8 +366,9 @@ export class GPUSystem {
     
     console.log(`🧠 Spawning ${agentData.length} agents into GPU state`);
     
-    // Create Float32Array for agent state data
+    // Create Float32Array for agent state data and properties data
     const stateData = new Float32Array(this.agentTextureSize * this.agentTextureSize * 4);
+    const propertiesData = new Float32Array(this.agentTextureSize * this.agentTextureSize * 4);
     
     // Fill in the agent data (up to maxAgents)
     const agentsToSpawn = Math.min(agentData.length, this.maxAgents);
@@ -279,12 +381,39 @@ export class GPUSystem {
       stateData[baseIndex + 1] = agent.y;
       stateData[baseIndex + 2] = agent.vx;
       stateData[baseIndex + 3] = agent.vy;
+      
+      // Store agent properties: (age, maxAge, isFrontier, brightness)
+      propertiesData[baseIndex + 0] = agent.age;
+      propertiesData[baseIndex + 1] = agent.maxAge;
+      propertiesData[baseIndex + 2] = agent.isFrontier ? 1.0 : 0.0;
+      propertiesData[baseIndex + 3] = agent.brightness;
+      
+      // Create CPU mirror for Frontier agents (for label rendering)
+      if (agent.isFrontier && agent.label && agent.sourceClusterId !== undefined && agent.targetClusterId !== undefined) {
+        this.frontierAgentMirrors.set(i, {
+          id: i, // GPU texture index
+          x: agent.x,
+          y: agent.y,
+          age: agent.age,
+          maxAge: agent.maxAge,
+          sourceClusterId: agent.sourceClusterId,
+          targetClusterId: agent.targetClusterId,
+          label: agent.label,
+          isActive: true
+        });
+      }
     }
     
-    // Upload initial state to both textures
+    // Upload initial state to both state textures
     for (let i = 0; i < 2; i++) {
       gl.bindTexture(gl.TEXTURE_2D, this.agentStateTextures[i]);
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.agentTextureSize, this.agentTextureSize, gl.RGBA, gl.FLOAT, stateData);
+    }
+    
+    // Upload initial properties to both properties textures
+    for (let i = 0; i < 2; i++) {
+      gl.bindTexture(gl.TEXTURE_2D, this.agentPropertiesTextures[i]);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.agentTextureSize, this.agentTextureSize, gl.RGBA, gl.FLOAT, propertiesData);
     }
     
     this.activeAgentCount = agentsToSpawn;
@@ -294,9 +423,9 @@ export class GPUSystem {
   // GPGPU agent update - processes agent logic entirely on GPU
   public update(trailTexture: WebGLTexture): void {
     const gl = this.gl;
-    
-    // Ping-pong to next agent state texture
     const destinationIndex = 1 - this.currentAgentSourceIndex;
+    
+    // Update agent state (positions and velocities)
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.agentStateFramebuffers[destinationIndex]);
     gl.viewport(0, 0, this.agentTextureSize, this.agentTextureSize);
     
@@ -307,10 +436,15 @@ export class GPUSystem {
     gl.bindTexture(gl.TEXTURE_2D, this.agentStateTextures[this.currentAgentSourceIndex]);
     gl.uniform1i(this.agentUpdateUniforms.uAgentStateTexture!, 0);
     
-    // Bind trail texture for sensing
+    // Bind current agent properties for reference
     gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.agentPropertiesTextures[this.currentAgentSourceIndex]);
+    gl.uniform1i(this.agentUpdateUniforms.uAgentPropertiesTexture!, 1);
+    
+    // Bind trail texture for sensing
+    gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, trailTexture);
-    gl.uniform1i(this.agentUpdateUniforms.uTrailTexture!, 1);
+    gl.uniform1i(this.agentUpdateUniforms.uTrailTexture!, 2);
     
     // Set uniforms for agent behavior
     gl.uniform2f(this.agentUpdateUniforms.uCanvasSize!, this.width, this.height);
@@ -321,10 +455,26 @@ export class GPUSystem {
     gl.uniform1f(this.agentUpdateUniforms.uSensorAngle!, Math.PI / 4);
     gl.uniform1f(this.agentUpdateUniforms.uTurnStrength!, 0.1);
     
-    // Process all agents in parallel
+    // Process agent state update
     this.drawQuad();
     
-    // Swap agent state buffers
+    // Update agent properties (age, death, hierarchy)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.agentPropertiesFramebuffers[destinationIndex]);
+    gl.viewport(0, 0, this.agentTextureSize, this.agentTextureSize);
+    
+    this.agentPropertiesShader.use();
+    
+    // Bind current agent properties as input
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.agentPropertiesTextures[this.currentAgentSourceIndex]);
+    gl.uniform1i(this.agentPropertiesUniforms.uAgentPropertiesTexture!, 0);
+    
+    gl.uniform1f(this.agentPropertiesUniforms.uDeltaTime!, 1.0);
+    
+    // Process agent properties update
+    this.drawQuad();
+    
+    // Swap buffers
     this.currentAgentSourceIndex = destinationIndex as 0 | 1;
   }
 
@@ -356,6 +506,11 @@ export class GPUSystem {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.agentStateTextures[this.currentAgentSourceIndex]);
     gl.uniform1i(this.agentRenderUniforms.uAgentStateTexture!, 0);
+    
+    // Bind current agent properties texture
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.agentPropertiesTextures[this.currentAgentSourceIndex]);
+    gl.uniform1i(this.agentRenderUniforms.uAgentPropertiesTexture!, 1);
     
     // Set uniforms
     gl.uniform1f(this.agentRenderUniforms.uAgentTextureSize!, this.agentTextureSize);
@@ -398,6 +553,33 @@ export class GPUSystem {
     return this.maxAgents;
   }
 
+  public getFrontierAgentMirrors(): FrontierAgentMirror[] {
+    return Array.from(this.frontierAgentMirrors.values()).filter(mirror => mirror.isActive);
+  }
+
+  // Update CPU mirrors with current GPU data (simplified - in a real implementation, 
+  // we'd need to read back from GPU textures, but that's expensive)
+  // For now, we'll update positions based on velocity and time
+  public updateFrontierMirrors(): void {
+    for (const [index, mirror] of this.frontierAgentMirrors) {
+      if (!mirror.isActive) continue;
+      
+      // Simple aging simulation (matching the GPU shader logic)
+      mirror.age += 1.0;
+      
+      // Remove dead agents
+      if (mirror.age > mirror.maxAge) {
+        mirror.isActive = false;
+        this.frontierAgentMirrors.delete(index);
+      }
+      
+      // TODO: In a more sophisticated implementation, we would:
+      // 1. Use transform feedback or compute shaders to read GPU state
+      // 2. Or use gl.readPixels periodically (expensive) to sync positions
+      // For now, agents maintain their spawn positions for label rendering
+    }
+  }
+
   public dispose(): void {
     const gl = this.gl;
     
@@ -410,8 +592,18 @@ export class GPUSystem {
       gl.deleteFramebuffer(framebuffer);
     }
     
+    // Cleanup agent properties buffers
+    for (const texture of this.agentPropertiesTextures) {
+      gl.deleteTexture(texture);
+    }
+    
+    for (const framebuffer of this.agentPropertiesFramebuffers) {
+      gl.deleteFramebuffer(framebuffer);
+    }
+    
     // Delete shader programs
     this.agentUpdateShader.dispose();
+    this.agentPropertiesShader.dispose();
     this.agentRenderShader.dispose();
     
     // Delete buffers

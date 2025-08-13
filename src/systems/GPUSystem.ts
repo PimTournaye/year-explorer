@@ -1,4 +1,4 @@
-import type { AgentSpawnData, CrossClusterActivity } from '../data/interfaces';
+import type { AgentSpawnData } from '../data/interfaces';
 import { Shader } from '../rendering/Shader';
 import { createFloatTexture, createFramebuffer, createScreenQuad, createBuffer } from '../rendering/utils';
 
@@ -16,15 +16,15 @@ export class GPUSystem {
   private activeAgentCount: number = 0;
 
   // Shader programs
-  private agentUpdateShader: Shader; // GPGPU brain shader
-  private agentRenderShader: Shader; // GPU agent rendering
+  private agentUpdateShader!: Shader; // GPGPU brain shader
+  private agentRenderShader!: Shader; // GPU agent rendering
 
   // Buffers
-  private screenQuadBuffer: WebGLBuffer;
-  private agentGridBuffer: WebGLBuffer;
+  private screenQuadBuffer!: WebGLBuffer;
+  private agentGridBuffer!: WebGLBuffer;
 
   // Uniforms for GPGPU agent update shader
-  private agentUpdateUniforms: {
+  private agentUpdateUniforms!: {
     uAgentStateTexture: WebGLUniformLocation | null;
     uTrailTexture: WebGLUniformLocation | null;
     uCanvasSize: WebGLUniformLocation | null;
@@ -37,7 +37,7 @@ export class GPUSystem {
   };
 
   // Uniforms for agent rendering
-  private agentRenderUniforms: {
+  private agentRenderUniforms!: {
     uAgentStateTexture: WebGLUniformLocation | null;
     uAgentTextureSize: WebGLUniformLocation | null;
     uCanvasSize: WebGLUniformLocation | null;

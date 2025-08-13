@@ -15,8 +15,12 @@ export class ParticleSystem {
   private scaleFactor: number = 1;
   private offsetX: number = 0;
   private offsetY: number = 0;
+  private width: number;
+  private height: number;
 
-  constructor(private width: number, private height: number) {
+  constructor(width: number, height: number) {
+    this.width = width;
+    this.height = height;
     console.log('✅ ParticleSystem initialized');
   }
 

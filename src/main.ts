@@ -29,7 +29,6 @@ class SemanticGarden {
   private particleSystem: ParticleSystem | null = null;
   
   // UI
-  private controls: Controls | null = null;
   private domUpdater: DOMUpdater;
   
   // Animation state
@@ -157,7 +156,7 @@ class SemanticGarden {
       }
     };
 
-    this.controls = new Controls(callbacks);
+    new Controls(callbacks);
   }
 
   private async loadApplicationData(): Promise<void> {

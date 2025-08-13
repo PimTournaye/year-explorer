@@ -12,20 +12,20 @@ export class TrailSystem {
   private currentTrailSourceIndex: 0 | 1 = 0;
 
   // Shader programs
-  private trailUpdateShader: Shader;
-  private trailDepositionShader: Shader;
-  private trailRenderShader: Shader;
+  private trailUpdateShader!: Shader;
+  private trailDepositionShader!: Shader;
+  private trailRenderShader!: Shader;
 
   // Screen quad for full-screen passes
-  private screenQuadBuffer: WebGLBuffer;
+  private screenQuadBuffer!: WebGLBuffer;
 
   // Uniform locations
-  private trailUpdateUniforms: {
+  private trailUpdateUniforms!: {
     uTrailTexture: WebGLUniformLocation | null;
     uDecayFactor: WebGLUniformLocation | null;
   };
 
-  private depositionUniforms: {
+  private depositionUniforms!: {
     uDecayedTrailTexture: WebGLUniformLocation | null;
     uAgentStateTexture: WebGLUniformLocation | null;
     uAgentTextureSize: WebGLUniformLocation | null;
@@ -34,7 +34,7 @@ export class TrailSystem {
     uCanvasSize: WebGLUniformLocation | null;
   };
 
-  private trailRenderUniforms: {
+  private trailRenderUniforms!: {
     uTrailTexture: WebGLUniformLocation | null;
   };
 

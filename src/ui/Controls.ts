@@ -10,8 +10,10 @@ export class Controls {
   private isPlaying: boolean = false;
   private speed: number = 1;
   private showParticles: boolean = true;
+  private callbacks: ControlCallbacks;
 
-  constructor(private callbacks: ControlCallbacks) {
+  constructor(callbacks: ControlCallbacks) {
+    this.callbacks = callbacks;
     this.setupControls();
     console.log('✅ Controls initialized');
   }

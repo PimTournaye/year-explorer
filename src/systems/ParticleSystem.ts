@@ -1,11 +1,12 @@
-import type { ClusteredData, PersistentParticle, ClusterInfo } from '../data/interfaces';
+import type { ClusteredData, PersistentParticle, ClusterInfo, Ping } from '../data/interfaces';
 
 export class ParticleSystem {
   private persistentParticles: PersistentParticle[] = [];
   private clusters: Map<number, ClusterInfo> = new Map();
+  private pings: Ping[] = [];
 
   // Configuration
-  private readonly MARGIN = 150;
+  private readonly MARGIN = 75; // Reduced from 150 to 75 for better screen usage
 
   // Visual bounds
   private minX: number = 0;
@@ -123,107 +124,101 @@ export class ParticleSystem {
     }
   }
 
-  public update(currentYear: number): void {
-    // Activate particles based on current year
+  public update(currentYear: number, activeWindowYears: number = 5.0): void {
+    // Zeitgeist constellation model: particles transition between starfield and cluster colors
     for (const particle of this.persistentParticles) {
-      if (particle.birthYear <= currentYear && !particle.isActive) {
-        particle.isActive = true;
-        particle.alpha = 0.0; // Start completely invisible
-      }
+      const isInActiveWindow = particle.birthYear >= (currentYear - activeWindowYears) && 
+                               particle.birthYear <= currentYear;
+      
+      particle.isActive = isInActiveWindow;
+      particle.phase += 0.015;
       
       if (particle.isActive) {
-        // Update individual particle phase for breathing
-        particle.phase += 0.015 + Math.random() * 0.01; // Slight randomness
-        
-        // Get cluster info for breathing
+        // CONSTELLATION STATE: Bright cluster colors
         const clusterInfo = this.clusters.get(particle.clusterId);
         if (clusterInfo) {
-          // Combine cluster breathing with individual particle movement
-          const clusterBreathe = Math.sin(clusterInfo.breathPhase) * 3; // Larger amplitude
-          const individualBreathe = Math.sin(particle.phase) * 1.5; // Individual breathing
-          
-          // Calculate breathing offset
-          const breatheRadius = clusterBreathe + individualBreathe;
-          const particleAngle = particle.phase + (particle.clusterId * 0.5); // Offset by cluster
-          
-          particle.targetX = particle.baseX + breatheRadius * Math.cos(particleAngle);
-          particle.targetY = particle.baseY + breatheRadius * Math.sin(particleAngle);
+          const individualBreathe = Math.sin(particle.phase) * 1.5;
+          const particleAngle = particle.phase + (particle.clusterId * 0.5);
+          particle.targetX = particle.baseX + individualBreathe * Math.cos(particleAngle);
+          particle.targetY = particle.baseY + individualBreathe * Math.sin(particleAngle);
         }
-        
-        // Smooth movement toward target
-        particle.currentX += (particle.targetX - particle.currentX) * 0.08;
-        particle.currentY += (particle.targetY - particle.currentY) * 0.08;
-        
-        // Much slower, smoother fade-in
-        const targetAlpha = 0.6 + Math.sin(particle.phase * 0.5) * 0.2; // Breathing alpha
-        if (particle.alpha < targetAlpha) {
-          particle.alpha += 0.003; // Much slower fade-in
-        }
-        
-        // Breathing size variation
-        particle.size = 1.5 + Math.sin(particle.phase * 0.8) * 0.5;
+        const targetAlpha = 0.9;
+        particle.alpha += (targetAlpha - particle.alpha) * 0.05;
+        particle.size = 2.0; // Larger active particles
+      } else {
+        // STARFIELD STATE: Faint grey dots
+        particle.targetX = particle.baseX;
+        particle.targetY = particle.baseY;
+        const starfieldAlpha = 0.5; // Brighter starfield
+        particle.alpha += (starfieldAlpha - particle.alpha) * 0.02;
+        particle.size = 1.2; // Larger, rounder starfield particles
       }
+      
+      particle.currentX += (particle.targetX - particle.currentX) * 0.08;
+      particle.currentY += (particle.targetY - particle.currentY) * 0.08;
     }
     
-    // Update cluster breathing (slower, more organic)
     for (const cluster of this.clusters.values()) {
-      cluster.breathPhase += 0.008 + Math.sin(cluster.id * 0.1) * 0.002; // Variable breathing rates
-      
-      // Activate cluster when it has active particles
+      cluster.breathPhase += 0.008;
       cluster.isActive = cluster.particles.some(p => p.isActive);
     }
+
+    // Update pings
+    this.pings = this.pings.filter(ping => {
+      ping.age++;
+      return ping.age <= ping.maxAge;
+    });
   }
 
   public render(ctx: CanvasRenderingContext2D, showParticles: boolean): void {
     ctx.save();
     
-    // Render cluster boundaries (minimal)
-    for (const cluster of this.clusters.values()) {
-      if (!cluster.isActive) continue;
+    // Render pings
+    for (const ping of this.pings) {
+      const life = ping.age / ping.maxAge;
+      const radius = life * 50; // Max radius of 50px
+      const alpha = 1.0 - life;
       
       ctx.beginPath();
-      ctx.arc(cluster.centerX, cluster.centerY, 3, 0, 2 * Math.PI);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.fill();
-      
-      // Very subtle cluster outline
-      const radius = Math.sqrt(cluster.density) * 8;
-      ctx.beginPath();
-      ctx.arc(cluster.centerX, cluster.centerY, radius, 0, 2 * Math.PI);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-      ctx.lineWidth = 1;
+      ctx.arc(ping.x, ping.y, radius, 0, 2 * Math.PI);
+      ctx.strokeStyle = `hsla(${ping.hue}, 70%, 65%, ${alpha})`;
+      ctx.lineWidth = 2;
       ctx.stroke();
     }
-    
-    // Render dense particle clouds with breathing effects (if enabled)
-    if (showParticles) {
-      for (const particle of this.persistentParticles) {
-        if (!particle.isActive || particle.alpha < 0.01) continue;
+
+    // Render active cluster indicators for narrative clarity
+    for (const cluster of this.clusters.values()) {
+      if (cluster.isActive) {
+        const activeParticles = cluster.particles.filter(p => p.isActive).length;
+        const pulse = 1 + (activeParticles / cluster.particles.length) * 2; // Pulse strength based on active particle ratio
+        const radius = Math.sqrt(cluster.density) * 4 * pulse;
         
-        const clusterHue = (particle.clusterId * 137.508) % 360;
-        const dynamicAlpha = particle.alpha * (0.8 + Math.sin(particle.phase * 0.3) * 0.2);
-        
-        // Main particle
         ctx.beginPath();
-        ctx.arc(particle.currentX, particle.currentY, particle.size, 0, 2 * Math.PI);
-        ctx.fillStyle = `hsla(${clusterHue}, 70%, 65%, ${dynamicAlpha})`;
-        ctx.fill();
-        
-        // Add breathing glow effect
-        if (particle.alpha > 0.3) {
-          const glowSize = particle.size + Math.sin(particle.phase) * 1;
-          const glowAlpha = dynamicAlpha * 0.3;
-          
+        ctx.arc(cluster.centerX, cluster.centerY, radius, 0, 2 * Math.PI);
+        ctx.strokeStyle = `hsla(${(cluster.id * 137.508) % 360}, 70%, 65%, 0.1)`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+
+    if (showParticles) {
+      // Optimized rendering loop
+      for (const particle of this.persistentParticles) {
+        if (particle.alpha < 0.01) continue;
+
+        if (!particle.isActive) {
+          // STARFIELD: Dim grey dots
+          ctx.fillStyle = `rgba(100, 100, 100, ${particle.alpha})`;
           ctx.beginPath();
-          ctx.arc(particle.currentX, particle.currentY, glowSize, 0, 2 * Math.PI);
-          ctx.fillStyle = `hsla(${clusterHue}, 80%, 80%, ${glowAlpha})`;
+          ctx.arc(particle.currentX, particle.currentY, particle.size, 0, 2 * Math.PI);
           ctx.fill();
-          
-          // Soft outer glow for density effect
-          ctx.shadowColor = `hsla(${clusterHue}, 70%, 70%, ${glowAlpha * 0.5})`;
-          ctx.shadowBlur = 6;
+        } else {
+          // CONSTELLATION: Bright, saturated colors
+          const clusterHue = (particle.clusterId * 137.508) % 360;
+          ctx.fillStyle = `hsla(${clusterHue}, 70%, 65%, ${particle.alpha})`;
+          ctx.beginPath();
+          ctx.arc(particle.currentX, particle.currentY, particle.size, 0, 2 * Math.PI);
           ctx.fill();
-          ctx.shadowBlur = 0;
         }
       }
     }
@@ -231,12 +226,34 @@ export class ParticleSystem {
     ctx.restore();
   }
 
+  public createPing(x: number, y: number, hue: number): void {
+    this.pings.push({ x, y, hue, age: 0, maxAge: 60 });
+  }
+
+  public processPings(agentProperties: Float32Array, agentExtended: Float32Array, agentState: Float32Array): void {
+    for (let i = 0; i < agentProperties.length; i += 4) {
+      const pingSignal = agentProperties[i + 3]; // Using brightness (w) channel for ping
+      if (pingSignal > 0.5) { // Ping signal is 1.0
+        const positionX = agentState[i];
+        const positionY = agentState[i+1];
+        const hue = agentExtended[i];
+        this.createPing(positionX, positionY, hue);
+      }
+    }
+  }
+
   public getClusters(): Map<number, ClusterInfo> {
     return this.clusters;
   }
 
   public getActiveParticleCount(): number {
-    return this.persistentParticles.filter(p => p.isActive).length;
+    return this.persistentParticles.filter(p => p.alpha > 0.01).length;
+  }
+  
+  public getConstellationParticleCount(currentYear: number, activeWindowYears: number = 5.0): number {
+    return this.persistentParticles.filter(p => {
+      return p.birthYear >= (currentYear - activeWindowYears) && p.birthYear <= currentYear;
+    }).length;
   }
 
   public getActiveClusters(): ClusterInfo[] {

@@ -5,12 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Semantic Garden - Organic Pathways</title>
   <style>
+    @font-face {
+      font-family: 'NectoMono';
+      src: url('/fonts/NectoMono-Regular.woff2') format('woff2');
+      font-weight: normal;
+      font-style: normal;
+    }
+
     body {
       margin: 0;
       padding: 0;
-      background: #000;
+      background: #1a1a1a;
       color: #fff;
-      font-family: 'Arial', sans-serif;
+      font-family: 'NectoMono', 'Arial', sans-serif;
       overflow: hidden;
     }
 
@@ -188,5 +195,6 @@
   </div>
 
   <script type="module" src="/src/main.ts"></script>
+  <script type="module" src="/src/checkForUpdates.ts"></script>
 </body>
 </html>

@@ -1,7 +1,14 @@
 {
-  "name": "vite-project",
-  "private": true,
-  "version": "0.0.0",
+  "name": "year-explorer",
+  "private": false,
+  "version": "1.0.0",
+  "description": "WebGL-based particle simulation and data visualization system",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PimTournaye/year-explorer.git"
+  },
+  "keywords": ["webgl", "particle-simulation", "data-visualization", "typescript", "vite"],
+  "author": "PimTournaye",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,10 +16,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@types/gsap": "^1.20.2",
-    "d3": "^7.9.0",
-    "gsap": "^3.13.0",
-    "pixi.js": "^8.11.0"
   },
   "devDependencies": {
     "@types/d3": "^7.4.3",

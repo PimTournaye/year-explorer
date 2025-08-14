@@ -1,0 +1,53 @@
+attribute float a_agentIndex;
+uniform sampler2D u_agentStateTexture;
+uniform sampler2D u_agentPropertiesTexture;
+uniform float u_agentTextureSize;
+uniform vec2 u_canvasSize;
+varying float v_brightness;
+varying float v_isFrontier;
+
+void main() {
+  // Convert agent index to texture coordinates
+  float x = mod(a_agentIndex, u_agentTextureSize);
+  float y = floor(a_agentIndex / u_agentTextureSize);
+  vec2 texCoord = (vec2(x, y) + 0.5) / u_agentTextureSize;
+  
+  // Read agent state from texture
+  vec4 agentState = texture2D(u_agentStateTexture, texCoord);
+  vec2 position = agentState.xy;
+  
+  // Read agent properties from texture
+  vec4 properties = texture2D(u_agentPropertiesTexture, texCoord);
+  float age = properties.x;
+  float maxAge = properties.y;
+  float isFrontier = properties.z;
+  float brightness = properties.w;
+  
+  // Skip inactive agents
+  if (length(position) < 1.0 || maxAge < 1.0) {
+    gl_Position = vec4(-10.0, -10.0, 0.0, 1.0); // Off-screen
+    gl_PointSize = 0.0;
+    v_brightness = 0.0;
+    v_isFrontier = 0.0;
+    return;
+  }
+  
+  // Calculate life fraction for smooth fade-in/out
+  float lifeFraction = age / maxAge;
+  
+  // Fade-in during first 20% of life, fade-out during last 20% of life
+  float fadeInFactor = smoothstep(0.0, 0.2, lifeFraction);
+  float fadeOutFactor = smoothstep(0.8, 1.0, lifeFraction);
+  float lifeCycleFade = fadeInFactor * (1.0 - fadeOutFactor);
+  
+  // Convert to clip space
+  vec2 clipPos = (position / u_canvasSize) * 2.0 - 1.0;
+  gl_Position = vec4(clipPos, 0.0, 1.0);
+  
+  // Frontier agents are larger and more prominent
+  gl_PointSize = isFrontier > 0.5 ? 8.0 : 3.0;
+  
+  // Pass properties to fragment shader with lifecycle fading applied
+  v_brightness = brightness * lifeCycleFade;
+  v_isFrontier = isFrontier;
+}

@@ -1,6 +1,6 @@
 // WebGL utility functions for buffer and texture creation
 
-export function createBuffer(gl: WebGLRenderingContext, data: Float32Array, usage: number = gl.STATIC_DRAW): WebGLBuffer {
+export function createBuffer(gl: WebGL2RenderingContext, data: Float32Array, usage: number = gl.STATIC_DRAW): WebGLBuffer {
   const buffer = gl.createBuffer();
   if (!buffer) throw new Error('Failed to create WebGL buffer');
   
@@ -11,7 +11,7 @@ export function createBuffer(gl: WebGLRenderingContext, data: Float32Array, usag
 }
 
 export function createTexture(
-  gl: WebGLRenderingContext, 
+  gl: WebGL2RenderingContext, 
   width: number, 
   height: number, 
   internalFormat: number = gl.RGBA,
@@ -33,35 +33,31 @@ export function createTexture(
 }
 
 export function createFloatTexture(
-  gl: WebGLRenderingContext, 
+  gl: WebGL2RenderingContext, 
   width: number, 
   height: number,
   data: Float32Array | null = null
 ): WebGLTexture {
-  // Check for float texture extension
-  const ext = gl.getExtension('OES_texture_float');
-  if (!ext) {
-    throw new Error('OES_texture_float extension not available - required for GPGPU');
-  }
-  
-  return createTexture(gl, width, height, gl.RGBA, gl.RGBA, gl.FLOAT, data);
+  return createTexture(gl, width, height, gl.RGBA32F, gl.RGBA, gl.FLOAT, data);
 }
 
-export function createFramebuffer(gl: WebGLRenderingContext, texture: WebGLTexture): WebGLFramebuffer {
+export function createFramebuffer(gl: WebGL2RenderingContext, texture: WebGLTexture): WebGLFramebuffer {
   const framebuffer = gl.createFramebuffer();
   if (!framebuffer) throw new Error('Failed to create WebGL framebuffer');
   
   gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-  
-  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+
+  const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+  if (status !== gl.FRAMEBUFFER_COMPLETE) {
+    console.error(`❌ Framebuffer setup failed with status: ${status}`);
     throw new Error('Framebuffer setup failed');
   }
   
   return framebuffer;
 }
 
-export function createScreenQuad(gl: WebGLRenderingContext): WebGLBuffer {
+export function createScreenQuad(gl: WebGL2RenderingContext): WebGLBuffer {
   // Create a quad that covers the entire screen in clip space (-1 to 1)
   const vertices = new Float32Array([
     -1, -1,  // Bottom left
@@ -72,3 +68,4 @@ export function createScreenQuad(gl: WebGLRenderingContext): WebGLBuffer {
 
   return createBuffer(gl, vertices);
 }
+

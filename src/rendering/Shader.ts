@@ -2,9 +2,9 @@
 
 export class Shader {
   public program: WebGLProgram;
-  private gl: WebGLRenderingContext;
+  private gl: WebGL2RenderingContext;
 
-  constructor(gl: WebGLRenderingContext, vertexSource: string, fragmentSource: string) {
+  constructor(gl: WebGL2RenderingContext, vertexSource: string, fragmentSource: string) {
     this.gl = gl;
     this.program = this.createProgram(vertexSource, fragmentSource);
   }

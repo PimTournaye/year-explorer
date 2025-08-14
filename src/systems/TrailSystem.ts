@@ -1,8 +1,14 @@
 import { Shader } from '../rendering/Shader';
 import { createTexture, createFramebuffer, createScreenQuad } from '../rendering/utils';
 
+    // Import shader sources
+import quadVertexSource from '../shaders/quad.vert?raw';
+import trailUpdateFragmentSource from '../shaders/trailUpdate.frag?raw';
+import agentDepositionFragmentSource from '../shaders/agentDeposition.frag?raw';
+import trailRenderFragmentSource from '../shaders/trailRender.frag?raw';
+
 export class TrailSystem {
-  private gl: WebGLRenderingContext;
+  private gl: WebGL2RenderingContext;
   private width: number;
   private height: number;
 
@@ -19,6 +25,10 @@ export class TrailSystem {
   // Screen quad for full-screen passes
   private screenQuadBuffer!: WebGLBuffer;
 
+  // Tuning parameters
+  private readonly DECAY_FACTOR = 0.98;
+  private readonly TRAIL_STRENGTH = 0.1;
+
   // Uniform locations
   private trailUpdateUniforms!: {
     uTrailTexture: WebGLUniformLocation | null;
@@ -28,6 +38,8 @@ export class TrailSystem {
   private depositionUniforms!: {
     uDecayedTrailTexture: WebGLUniformLocation | null;
     uAgentStateTexture: WebGLUniformLocation | null;
+    uAgentPropertiesTexture: WebGLUniformLocation | null;
+    uAgentExtendedTexture: WebGLUniformLocation | null;
     uAgentTextureSize: WebGLUniformLocation | null;
     uActiveAgentCount: WebGLUniformLocation | null;
     uTrailStrength: WebGLUniformLocation | null;
@@ -36,9 +48,10 @@ export class TrailSystem {
 
   private trailRenderUniforms!: {
     uTrailTexture: WebGLUniformLocation | null;
+    uThreshold: WebGLUniformLocation | null;
   };
 
-  constructor(gl: WebGLRenderingContext, width: number, height: number) {
+  constructor(gl: WebGL2RenderingContext, width: number, height: number) {
     this.gl = gl;
     this.width = width;
     this.height = height;
@@ -78,84 +91,6 @@ export class TrailSystem {
   private initializeShaders(): void {
     const gl = this.gl;
 
-    // Standard vertex shader for full-screen quad operations
-    const quadVertexSource = `
-      attribute vec2 a_position;
-      varying vec2 v_texCoord;
-      
-      void main() {
-        gl_Position = vec4(a_position, 0.0, 1.0);
-        v_texCoord = (a_position + 1.0) * 0.5;
-      }
-    `;
-
-    // Trail update shader (decay trails over time)
-    const trailUpdateFragmentSource = `
-      precision mediump float;
-      varying vec2 v_texCoord;
-      uniform sampler2D u_trailTexture;
-      uniform float u_decayFactor;
-
-      void main() {
-        vec4 color = texture2D(u_trailTexture, v_texCoord);
-        gl_FragColor = vec4(color.rgb * u_decayFactor, 1.0);
-      }
-    `;
-
-    // Agent deposition shader (agents deposit trails - reads from GPU agent state)
-    const agentDepositionFragmentSource = `
-      precision highp float;
-      varying vec2 v_texCoord;
-      uniform sampler2D u_decayedTrailTexture;
-      uniform sampler2D u_agentStateTexture;
-      uniform float u_agentTextureSize;
-      uniform int u_activeAgentCount;
-      uniform float u_trailStrength;
-      uniform vec2 u_canvasSize;
-
-      void main() {
-        vec4 color = texture2D(u_decayedTrailTexture, v_texCoord);
-        float deposit = 0.0;
-        
-        // Convert fragment coord to world position
-        vec2 worldPos = v_texCoord * u_canvasSize;
-        
-        // Sample all active agents from the agent state texture
-        for (int y = 0; y < 64; y++) {
-          for (int x = 0; x < 64; x++) {
-            int agentIndex = y * 64 + x;
-            if (agentIndex >= u_activeAgentCount) break;
-            
-            vec2 texCoord = (vec2(float(x), float(y)) + 0.5) / u_agentTextureSize;
-            vec4 agentState = texture2D(u_agentStateTexture, texCoord);
-            
-            // agentState.xy = position, agentState.zw = velocity
-            vec2 agentPos = agentState.xy;
-            
-            // Skip inactive agents (position = 0,0)
-            if (length(agentPos) < 1.0) continue;
-            
-            vec2 diff = worldPos - agentPos;
-            float dist = length(diff);
-            deposit += smoothstep(10.0, 0.0, dist) * u_trailStrength;
-          }
-        }
-
-        gl_FragColor = vec4(color.rgb + deposit, 1.0);
-      }
-    `;
-
-    // Trail rendering shader
-    const trailRenderFragmentSource = `
-      precision mediump float;
-      varying vec2 v_texCoord;
-      uniform sampler2D u_trailTexture;
-
-      void main() {
-        gl_FragColor = texture2D(u_trailTexture, v_texCoord);
-      }
-    `;
-
     // Create shader programs
     this.trailUpdateShader = new Shader(gl, quadVertexSource, trailUpdateFragmentSource);
     this.trailDepositionShader = new Shader(gl, quadVertexSource, agentDepositionFragmentSource);
@@ -171,6 +106,8 @@ export class TrailSystem {
     this.depositionUniforms = {
       uDecayedTrailTexture: this.trailDepositionShader.getUniformLocation('u_decayedTrailTexture'),
       uAgentStateTexture: this.trailDepositionShader.getUniformLocation('u_agentStateTexture'),
+      uAgentPropertiesTexture: this.trailDepositionShader.getUniformLocation('u_agentPropertiesTexture'),
+      uAgentExtendedTexture: this.trailDepositionShader.getUniformLocation('u_agentExtendedTexture'),
       uAgentTextureSize: this.trailDepositionShader.getUniformLocation('u_agentTextureSize'),
       uActiveAgentCount: this.trailDepositionShader.getUniformLocation('u_activeAgentCount'),
       uTrailStrength: this.trailDepositionShader.getUniformLocation('u_trailStrength'),
@@ -179,19 +116,21 @@ export class TrailSystem {
 
     // Get uniform locations for trail rendering
     this.trailRenderUniforms = {
-      uTrailTexture: this.trailRenderShader.getUniformLocation('u_trailTexture')
+      uTrailTexture: this.trailRenderShader.getUniformLocation('u_trailTexture'),
+      uThreshold: this.trailRenderShader.getUniformLocation('u_threshold')
     };
   }
 
-  public update(agentStateTexture: WebGLTexture, agentTextureSize: number, activeAgentCount: number): void {
+  public update(agentStateTexture: WebGLTexture, agentPropertiesTexture: WebGLTexture, agentExtendedTexture: WebGLTexture, agentTextureSize: number, activeAgentCount: number): void {
     const gl = this.gl;
     gl.viewport(0, 0, this.width, this.height);
+
 
     // Pass 1: Trail decay
     this.updateTrails();
 
     // Pass 2: Agent trail deposition (from GPU state)
-    this.depositAgentTrails(agentStateTexture, agentTextureSize, activeAgentCount);
+    this.depositAgentTrails(agentStateTexture, agentPropertiesTexture, agentExtendedTexture, agentTextureSize, activeAgentCount);
   }
 
   private updateTrails(): void {
@@ -207,7 +146,7 @@ export class TrailSystem {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.trailTextures[this.currentTrailSourceIndex]);
     gl.uniform1i(this.trailUpdateUniforms.uTrailTexture!, 0);
-    gl.uniform1f(this.trailUpdateUniforms.uDecayFactor!, 0.995);
+    gl.uniform1f(this.trailUpdateUniforms.uDecayFactor!, this.DECAY_FACTOR);
     
     this.drawQuad();
     
@@ -215,8 +154,9 @@ export class TrailSystem {
     this.currentTrailSourceIndex = destinationIndex as 0 | 1;
   }
 
-  private depositAgentTrails(agentStateTexture: WebGLTexture, agentTextureSize: number, activeAgentCount: number): void {
+  private depositAgentTrails(agentStateTexture: WebGLTexture, agentPropertiesTexture: WebGLTexture, agentExtendedTexture: WebGLTexture, agentTextureSize: number, activeAgentCount: number): void {
     const gl = this.gl;
+    
     
     // Agent deposition pass (using GPU agent state, not CPU array)
     const destinationIndex = 1 - this.currentTrailSourceIndex;
@@ -234,10 +174,20 @@ export class TrailSystem {
     gl.bindTexture(gl.TEXTURE_2D, agentStateTexture);
     gl.uniform1i(this.depositionUniforms.uAgentStateTexture!, 1);
     
+    // Bind agent properties texture (for frontier status)
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, agentPropertiesTexture);
+    gl.uniform1i(this.depositionUniforms.uAgentPropertiesTexture!, 2);
+    
+    // Bind agent extended texture (for cluster colors)
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, agentExtendedTexture);
+    gl.uniform1i(this.depositionUniforms.uAgentExtendedTexture!, 3);
+    
     // Set uniforms
     gl.uniform1f(this.depositionUniforms.uAgentTextureSize!, agentTextureSize);
     gl.uniform1i(this.depositionUniforms.uActiveAgentCount!, activeAgentCount);
-    gl.uniform1f(this.depositionUniforms.uTrailStrength!, 0.1);
+    gl.uniform1f(this.depositionUniforms.uTrailStrength!, this.TRAIL_STRENGTH);
     gl.uniform2f(this.depositionUniforms.uCanvasSize!, this.width, this.height);
     
     this.drawQuad();
@@ -277,9 +227,12 @@ export class TrailSystem {
     gl.bindTexture(gl.TEXTURE_2D, this.trailTextures[this.currentTrailSourceIndex]);
     gl.uniform1i(this.trailRenderUniforms.uTrailTexture!, 0);
     
-    // Enable additive blending for glow effect
+    // Set threshold for "goopy" form (tunable parameter)
+    gl.uniform1f(this.trailRenderUniforms.uThreshold!, 0.15);
+    
+    // Enable alpha blending for solid edges with transparency
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     
     this.drawQuad();
     

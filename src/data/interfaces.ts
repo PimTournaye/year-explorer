@@ -67,6 +67,8 @@ export interface AgentSpawnData {
   // Hierarchy properties
   isFrontier: boolean; // true = Frontier agent (bright, visible), false = Ecosystem agent (dim)
   brightness: number; // 0.0-1.0, visual prominence
+  // Trail color properties for subtle "dye" effect
+  clusterHue: number; // 0.0-360.0, hue for cluster-based trail coloring
   // Label data (only used for Frontier agents)
   sourceClusterId?: number;
   targetClusterId?: number;
@@ -78,6 +80,8 @@ export interface FrontierAgentMirror {
   id: number; // Index in GPU texture
   x: number;
   y: number;
+  vx: number; // Velocity X for physics sync
+  vy: number; // Velocity Y for physics sync
   age: number;
   maxAge: number;
   sourceClusterId: number;

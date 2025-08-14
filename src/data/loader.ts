@@ -1,4 +1,4 @@
-import type { Project, ClusterData, ClusteredData } from './interfaces';
+import type { Project, ClusterData, ClusteredData, Bridge } from './interfaces';
 
 export async function loadData(): Promise<ClusteredData> {
   try {
@@ -61,6 +61,21 @@ export async function loadData(): Promise<ClusteredData> {
     
   } catch (error) {
     console.error('❌ Failed to load clustered data:', error);
+    throw error;
+  }
+}
+
+export async function loadBridgeData(): Promise<Bridge[]> {
+  try {
+    const response = await fetch('/bridge_analysis.json');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const bridges = await response.json() as Bridge[];
+    console.log(`🚀 Loaded ${bridges.length} bridges`);
+    return bridges;
+  } catch (error) {
+    console.error('❌ Failed to load bridge data:', error);
     throw error;
   }
 }

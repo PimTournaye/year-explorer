@@ -18,8 +18,8 @@ void main() {
   
   // Read agent properties from texture
   vec4 properties = texture2D(u_agentPropertiesTexture, texCoord);
-  float age = properties.x;
-  float maxAge = properties.y;
+  v_age = properties.x;      // R channel stores age
+  v_maxAge = properties.y;   // G channel stores maxAge
   float isFrontier = properties.z;
   float brightness = properties.w;
   

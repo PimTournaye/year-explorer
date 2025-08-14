@@ -95,3 +95,20 @@ export interface CrossClusterActivity {
   targetCluster: number;
   count: number;
 }
+
+export interface Project {
+  id: string;
+  title: string;
+  year: number;
+  text: string;
+  x: number;
+  y: number;
+}
+
+export interface Bridge {
+    project_id: number,
+    year: number,
+    source_cluster: number,
+    target_cluster: number,
+    similarity_score: number
+}

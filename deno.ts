@@ -12,25 +12,9 @@ serve(async (req) => {
     });
   }
 
-  // Serve TypeScript files with correct MIME type
-  if (url.pathname.endsWith('.ts')) {
-    try {
-      const filePath = `.${url.pathname}`;
-      const content = await Deno.readTextFile(filePath);
-      return new Response(content, {
-        headers: { 
-          "Content-Type": "application/javascript",
-          "Access-Control-Allow-Origin": "*"
-        },
-      });
-    } catch {
-      return new Response("File not found", { status: 404 });
-    }
-  }
-
-  // Serve static files
+  // Serve built static files from dist directory
   return serveDir(req, {
-    fsRoot: ".",
+    fsRoot: "./dist",
     showDirListing: false,
   });
 });

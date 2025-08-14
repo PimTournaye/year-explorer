@@ -5,8 +5,9 @@ import { Controls, type ControlCallbacks } from './ui/Controls';
 import { DOMUpdater } from './ui/DOMUpdater';
 import { Simulation } from './simulation';
 import { Renderer } from './renderer'; // New import
-import { loadData } from './data/loader';
+import { loadBridgeData, loadData } from './data/loader';
 import type { ClusteredData } from './data/interfaces';
+import type { Bridge } from './types/interfaces';
 
 
 export class SemanticGarden {
@@ -33,7 +34,9 @@ export class SemanticGarden {
   private speed: number = 1;
   private animationId: number | null = null;
   private showParticles: boolean = true;
-  private data: ClusteredData | null = null; // Keep data here for loadApplicationData
+  private data: ClusteredData | null = null;
+  private ledger: any;
+  private bridgeData: Bridge[];
 
   constructor() {
     this.canvas = document.getElementById('canvas') as HTMLCanvasElement;
@@ -60,6 +63,7 @@ export class SemanticGarden {
       this.particleSystem,
       this.gpuSystem,
       this.data!,
+      this.bridgeData,
       this.width,
       this.height
     );
@@ -143,6 +147,8 @@ export class SemanticGarden {
     try {
       this.data = await loadData();
       console.log('✅ Application data loaded');
+      this.bridgeData = await loadBridgeData(); // Load bridge data
+      console.log('✅ Bridge data loaded');
     } catch (error) {
       console.error('❌ Failed to initialize application:', error);
     }

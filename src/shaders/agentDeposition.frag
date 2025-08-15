@@ -62,7 +62,7 @@ void main(){
   }
   
   // The final color combines the old trail, the new brightness, and the new color.
-  gl_FragColor=vec4(existingColor.rgb+colorDeposit+vec3(brightnessDeposit),1.);
+  gl_FragColor=vec4(existingColor.rgb-colorDeposit+vec3(brightnessDeposit),1.0);
 }
 
 // void main() {

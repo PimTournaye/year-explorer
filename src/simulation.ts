@@ -14,6 +14,13 @@ export class Simulation {
   // Simulation state
   public currentYear: number = 1981; // Start year
 
+  // Protagonist cluster system
+  private protagonistClusters: number[] = [];
+  private lastTrioSwapYear: number = 0;
+  
+  // Protagonist cluster colors
+  public readonly PROTAGONIST_COLORS = ['#db4135', '#ecb92e', '#101d43'];
+
   // Animation parameters (moved from SemanticGarden)
   public readonly START_YEAR = 1981;
   public readonly END_YEAR = 2025;
@@ -69,6 +76,28 @@ export class Simulation {
     this.height = height;
   }
 
+  /**
+   * Get current protagonist clusters with their information
+   */
+  public getProtagonistClusters(): Array<{id: number, color: string, name: string}> {
+    return this.protagonistClusters.map((clusterId, index) => {
+      const cluster = this.data.clusters.find(c => c.id === clusterId);
+      return {
+        id: clusterId,
+        color: this.PROTAGONIST_COLORS[index] || '#666666',
+        name: cluster?.topTerms?.[0] || `Cluster ${clusterId}`
+      };
+    });
+  }
+
+  /**
+   * Get the color for a specific cluster if it's a protagonist cluster
+   */
+  public getClusterColor(clusterId: number): string | null {
+    const index = this.protagonistClusters.indexOf(clusterId);
+    return index >= 0 ? this.PROTAGONIST_COLORS[index] : null;
+  }
+
   public update(): void {
 
     // --- SECTION 1: PER-FRAME LOGIC ---
@@ -85,6 +114,12 @@ export class Simulation {
     const currentSimYear = Math.floor(this.currentYear);
     if (currentSimYear <= this.lastYearProcessed) return;
   
+    // Check if we need to swap protagonist clusters every 5 years
+    if (currentSimYear - this.lastTrioSwapYear >= 5 || this.protagonistClusters.length === 0) {
+      this.selectNewProtagonistClusters();
+      this.lastTrioSwapYear = currentSimYear;
+      console.log(`New Protagonist Clusters: ${this.protagonistClusters.join(', ')}`);
+    }
 
     // Detect cross-cluster activity for pathways
     let bridgesInWindow = this.findBridgesInWindow();
@@ -109,7 +144,10 @@ export class Simulation {
 
     // --- 3. Proceed with the (now strictly limited) list of bridges ---
     const frontierBridge = this.selectFrontierBridge(bridgesInWindow);
-    const ecosystemBridges = bridgesInWindow.filter(b => b !== frontierBridge);
+    // Filter ecosystem bridges to only include those from protagonist clusters
+    const ecosystemBridges = bridgesInWindow.filter(b => 
+      b !== frontierBridge && this.protagonistClusters.includes(b.source_cluster)
+    );
 
     // Spawn agents directly into GPU textures for detected pathway activities
     const agentSpawns = this.createAgentSpawnData(frontierBridge, ecosystemBridges);
@@ -157,11 +195,20 @@ export class Simulation {
       return null;
     }
 
+    // Filter bridges to only include those from protagonist clusters
+    const protagonistBridges = bridgesInWindow.filter(bridge => 
+      this.protagonistClusters.includes(bridge.source_cluster)
+    );
+    
+    if (protagonistBridges.length === 0) {
+      return null; // No bridges from protagonist clusters
+    }
+
     let frontierBridge: Bridge | null = null;
     let highestScore = -Infinity;
 
     // Evaluate each bridge and find the one with the highest combined score
-    for (const bridge of bridgesInWindow) {
+    for (const bridge of protagonistBridges) {
       // Calculate recency score - how long since this pathway was last highlighted
       const recencyScore = this.calculateRecencyScore(bridge.source_cluster, bridge.target_cluster);
 
@@ -190,6 +237,41 @@ export class Simulation {
     }
 
     return frontierBridge;
+  }
+
+  /**
+   * Randomly selects 3 unique clusters to be the protagonists for the next 5-year period
+   * Only selects clusters that have active projects in the current time window
+   */
+  private selectNewProtagonistClusters(): void {
+    const windowStart = this.currentYear - this.PROJECT_ACTIVE_WINDOW_YEARS;
+    const windowEnd = this.currentYear;
+    
+    // Find clusters that have projects with years in the active window
+    const clustersWithActiveProjects = this.data.clusters.filter(cluster => {
+      return this.data.projects.some(project => 
+        project.cluster_id === cluster.id && 
+        project.year >= windowStart && 
+        project.year <= windowEnd
+      );
+    });
+    
+    const availableClusterIds = clustersWithActiveProjects.map(cluster => cluster.id);
+    const selectedClusters: number[] = [];
+    
+    // Randomly select up to 3 unique clusters from those with active projects
+    while (selectedClusters.length < 3 && availableClusterIds.length > 0) {
+      const randomIndex = Math.floor(Math.random() * availableClusterIds.length);
+      const selectedCluster = availableClusterIds.splice(randomIndex, 1)[0];
+      selectedClusters.push(selectedCluster);
+    }
+    
+    this.protagonistClusters = selectedClusters;
+    
+    // Log if we couldn't find 3 active clusters
+    if (selectedClusters.length < 3) {
+      console.warn(`Only found ${selectedClusters.length} clusters with active projects in year ${Math.floor(this.currentYear)}`);
+    }
   }
 
   /**
@@ -255,6 +337,8 @@ export class Simulation {
     let directive_verb: string | undefined;
     let directive_noun: string | undefined;
     let projectTitle: string | undefined;
+    let sourceClusterName: string | undefined;
+    let sourceClusterColor: string | undefined;
 
     if (isFrontier) {
       directive_verb = this.getRandomDirectiveVerb();
@@ -263,6 +347,11 @@ export class Simulation {
       // Find the project title
       const project = this.data.projects.find(p => parseInt(p.id) === bridge.project_id);
       projectTitle = project ? project.title : `Project ${bridge.project_id}`;
+      
+      // Find source cluster information
+      const sourceCluster = this.data.clusters.find(c => c.id === bridge.source_cluster);
+      sourceClusterName = sourceCluster?.topTerms?.[0] || `Cluster ${bridge.source_cluster}`;
+      sourceClusterColor = this.getClusterColor(bridge.source_cluster) || '#666666';
     }
 
     let maxAge: number;
@@ -286,6 +375,8 @@ export class Simulation {
       directive_verb: directive_verb,
       directive_noun: directive_noun,
       projectTitle: projectTitle,
+      sourceClusterName: sourceClusterName,
+      sourceClusterColor: sourceClusterColor,
     };
   }
 

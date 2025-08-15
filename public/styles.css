@@ -9,7 +9,8 @@ html, body {
 }
 
 body {
-  background-color: #111; /* Charcoal background */
+  /* background-color: #111; Charcoal background */
+  background-color: #fafafa; /* Light background for better contrast */
   color: #eee;
   font-family: "NectoMono", monospace;
   display: grid;

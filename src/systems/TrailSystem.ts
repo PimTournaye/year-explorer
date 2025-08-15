@@ -231,7 +231,8 @@ export class TrailSystem {
     gl.uniform1f(this.trailRenderUniforms.uThreshold!, 0.0);
 
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    // gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); -- dark mode
+    gl.blendFunc(gl.ZERO, gl.SRC_COLOR); // Multiplies the trail color with the background
 
     this.drawQuad(this.trailRenderShader);
 

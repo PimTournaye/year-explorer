@@ -164,7 +164,8 @@ export class SemanticGarden {
       this.gpuSystem.getActiveAgentCount()
     );
 
-    this.renderer.render(this.showParticles); // Pass showParticles to renderer
+    const protagonistClusters = this.simulation.getProtagonistClusters();
+    this.renderer.render(this.showParticles, protagonistClusters); // Pass showParticles and protagonist clusters to renderer
     if (this.ledger) {
       this.ledger.update(this.gpuSystem.getFrontierAgentMirrors(), this.simulation.currentYear);
     }
@@ -176,7 +177,7 @@ export class SemanticGarden {
     this.domUpdater.update({
       year: this.simulation.currentYear,
       activeParticles: this.particleSystem.getConstellationParticleCount(this.simulation.currentYear, this.simulation.PROJECT_ACTIVE_WINDOW_YEARS),
-      activeClusters: this.particleSystem.getActiveClusters().length,
+      activeClusters: this.simulation.getProtagonistClusters().length,
       activeAgents: this.gpuSystem.getActiveAgentCount()
     });
     this.ledger!.update(this.gpuSystem.getFrontierAgentMirrors(), this.simulation.currentYear);

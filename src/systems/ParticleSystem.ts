@@ -218,10 +218,15 @@ export class ParticleSystem {
     });
   }
 
-  public render(ctx: CanvasRenderingContext2D, showParticles: boolean): void {
+  public render(ctx: CanvasRenderingContext2D, showParticles: boolean, protagonistClusters?: Array<{id: number, color: string, name: string}>): void {
     if (!showParticles) return;
 
     ctx.save();
+
+    // Render protagonist cluster highlights first (behind particles)
+    if (protagonistClusters) {
+      this.renderProtagonistClusters(ctx, protagonistClusters);
+    }
 
     // This loop ensures all 2744 projects are always on screen.
   for (const particle of this.persistentParticles) {
@@ -241,7 +246,7 @@ export class ParticleSystem {
     } else {
       // --- INACTIVE STARFIELD PARTICLE ---
       // This project is not from the current era.
-      finalColor = "rgba(204, 200, 200, 0.3)"; // Dim grey
+      finalColor = "rgba(39, 39, 39, 0.3)"; // Dim grey
       finalSize = 3.0; // Smaller, more subtle
       ctx.globalAlpha = 0.5; // Constant dim alpha
     }
@@ -256,6 +261,52 @@ export class ParticleSystem {
   // Reset global alpha so other rendering isn't affected.
   ctx.globalAlpha = 1.0; 
   ctx.restore();
+  }
+
+  private renderProtagonistClusters(ctx: CanvasRenderingContext2D, protagonistClusters: Array<{id: number, color: string, name: string}>): void {
+    ctx.save();
+    
+    for (const protagonist of protagonistClusters) {
+      const cluster = this.clusters.get(protagonist.id);
+      if (!cluster) continue;
+
+      const [centerX, centerY] = this.worldToScreen(cluster.centerX, cluster.centerY);
+      
+      // Draw cluster boundary (large circle)
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 120, 0, Math.PI * 2);
+      ctx.strokeStyle = protagonist.color;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([10, 5]);
+      ctx.globalAlpha = 0.6;
+      ctx.stroke();
+      
+      // Draw cluster centroid (bright dot)
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
+      ctx.fillStyle = protagonist.color;
+      ctx.globalAlpha = 1.0;
+      ctx.fill();
+      
+      // Add a subtle glow effect
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 15, 0, Math.PI * 2);
+      ctx.fillStyle = protagonist.color;
+      ctx.globalAlpha = 0.3;
+      ctx.fill();
+      
+      // Draw cluster label
+      ctx.font = '14px monospace';
+      ctx.fillStyle = protagonist.color;
+      ctx.globalAlpha = 0.8;
+      ctx.textAlign = 'center';
+      ctx.fillText(protagonist.name, centerX, centerY - 140);
+      
+      // Reset line dash
+      ctx.setLineDash([]);
+    }
+    
+    ctx.restore();
   }
 }
 

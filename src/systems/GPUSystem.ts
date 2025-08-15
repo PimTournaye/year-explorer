@@ -219,6 +219,8 @@ export class GPUSystem {
           sourceClusterId: data.sourceClusterId!, targetClusterId: data.targetClusterId!,
           directive_verb: data.directive_verb!, directive_noun: data.directive_noun!,
           projectTitle: data.projectTitle!,
+          sourceClusterName: data.sourceClusterName!,
+          sourceClusterColor: data.sourceClusterColor!,
           isActive: true
         });
       }

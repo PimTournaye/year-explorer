@@ -54,7 +54,7 @@ export class Renderer {
     this.setupOverlayCanvas();
   }
 
-  public render(showParticles: boolean): void {
+  public render(showParticles: boolean, protagonistClusters?: Array<{id: number, color: string, name: string}>): void {
     // Clear overlay canvas for 2D elements on top of WebGL
     this.overlayCtx.clearRect(0, 0, this.width, this.height);
 
@@ -66,7 +66,7 @@ export class Renderer {
 
     // Render particles and clusters using overlay canvas (on top of WebGL)
     this.overlayCtx.save();
-    this.particleSystem.render(this.overlayCtx, showParticles);
+    this.particleSystem.render(this.overlayCtx, showParticles, protagonistClusters);
     this.overlayCtx.restore();
   }
 }

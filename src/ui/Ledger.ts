@@ -7,8 +7,8 @@ export interface LedgerCallbacks {
 
 export class Ledger {
   // Customizable accent color - change this to modify the entire theme
-  private accentColor: string = '#d4af37'; // Default: NASA gold
-  private accentColorBright: string = '#ffd700'; // Brighter version for highlights
+  private accentColor: string = '#080808f'; // Default: NASA gold
+  private accentColorBright: string = '#1a1919f'; // Brighter version for highlights
   
   // Configuration
   private showDebugControls: boolean = true; // Set to false to hide debug controls
@@ -140,27 +140,37 @@ export class Ledger {
   private createLedgerEntryElement(agent: FrontierAgentMirror): HTMLDivElement {
     const element = document.createElement('div');
     element.className = 'agent-card';
+    
+    // Set the cluster color for the left border and pseudo-element
+    element.style.borderLeftColor = agent.sourceClusterColor;
+    element.style.setProperty('--cluster-color', agent.sourceClusterColor);
 
-    const agentHeader = document.createElement('div');
-    agentHeader.className = 'agent-header';
+    // Create single row container with 4 columns: ID - Directive - Status - Pathway
+    const agentRow = document.createElement('div');
+    agentRow.className = 'agent-row';
 
+    // Column 1: ID (Project Title)
     const agentId = document.createElement('div');
     agentId.className = 'agent-id';
     agentId.textContent = agent.projectTitle;
 
-    const agentStatus = document.createElement('div');
-    agentStatus.className = 'agent-status';
-    agentStatus.textContent = agent.id.toString();
-
-    agentHeader.append(agentId, agentStatus);
-
+    // Column 2: Directive
     const agentDirective = document.createElement('div');
     agentDirective.className = 'agent-directive';
     agentDirective.textContent = `${agent.directive_verb}: ${agent.directive_noun}`;
 
+    // Column 3: Status (Cluster Name)
+    const agentStatus = document.createElement('div');
+    agentStatus.className = 'agent-status';
+    agentStatus.textContent = agent.sourceClusterName;
+    agentStatus.style.backgroundColor = agent.sourceClusterColor;
+
+    // Column 4: Pathway
     const agentPathway = document.createElement('div');
     agentPathway.className = 'agent-pathway';
     agentPathway.innerHTML = `CLUSTER_${agent.sourceClusterId.toString().padStart(2, '0')} <span class="pathway-arrow">→</span> CLUSTER_${agent.targetClusterId.toString().padStart(2, '0')}`;
+
+    agentRow.append(agentId, agentDirective, agentStatus, agentPathway);
 
     if (this.showLifespanProgress) {
       const agentProgress = document.createElement('div');
@@ -182,9 +192,9 @@ export class Ledger {
       progressBarContainer.appendChild(progressBar);
       agentProgress.append(progressLabel, progressBarContainer, progressText);
 
-      element.append(agentHeader, agentDirective, agentPathway, agentProgress);
+      element.append(agentRow, agentProgress);
     } else {
-      element.append(agentHeader, agentDirective, agentPathway);
+      element.append(agentRow);
     }
 
     return element;
@@ -228,7 +238,7 @@ export class Ledger {
     }, 300);
   }
 
-  private injectStyles(): void {
+    private injectStyles(): void {
     if (document.getElementById('ledger-styles')) return; // Prevent duplicate injection
 
     const style = document.createElement('style');
@@ -237,22 +247,23 @@ export class Ledger {
       @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
       
       .ledger-sidebar {
-        width: 500px;
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 600px;
         height: 100vh;
-        background: linear-gradient(180deg, #1a1812 0%, #141410 100%);
-        border-left: 3px solid ${this.accentColor};
+        background: linear-gradient(180deg, #ffffff 0%, #f8f8f8 100%);
+        border-left: 3px solid #080808;
         display: flex;
         flex-direction: column;
-        box-shadow: -5px 0 20px rgba(0,0,0,0.7);
+        box-shadow: -5px 0 20px rgba(0,0,0,0.1);
         font-family: 'JetBrains Mono', monospace;
-        color: #e0e0e0;
-        grid-column: 2;
-        box-sizing: border-box;
-        overflow: hidden;
+        color: #2a2a2a;
+        z-index: 1000;
       }
       
       .ledger-header {
-        background: linear-gradient(135deg, #252218, #1f1e16);
+        background: linear-gradient(135deg, #f5f5f5, #eeeeee);
         border-bottom: 2px solid ${this.accentColor};
         padding: 24px 16px 16px 16px;
         position: relative;
@@ -269,14 +280,14 @@ export class Ledger {
       }
       
       .year-display {
-        font-size: 80px;
+        font-size: 100px;
         font-weight: 700;
-        color: #ffffff;
+        color: #1a1a1a;
         margin-bottom: 20px;
-        text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+        text-shadow: 0 0 20px rgba(184, 134, 11, 0.3);
         letter-spacing: 3px;
         text-align: center;
-        background: linear-gradient(135deg, #ffffff, #f0f0f0);
+        background: linear-gradient(135deg, #1a1a1a, #333333);
         background-clip: text;
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
@@ -290,9 +301,9 @@ export class Ledger {
       }
       
       .control-btn {
-        background: linear-gradient(135deg, #3a3420, #2a281a);
+        background: linear-gradient(135deg, #f0f0f0, #e8e8e8);
         border: 1px solid ${this.accentColor};
-        color: #e0e0e0;
+        color: #2a2a2a;
         font-family: inherit;
         font-size: 16px;
         width: 44px;
@@ -302,8 +313,9 @@ export class Ledger {
       }
       
       .control-btn.playing {
-        background: linear-gradient(135deg, ${this.accentColor}, #b8941f);
-        box-shadow: 0 0 15px rgba(212, 175, 55, 0.6);
+        background: linear-gradient(135deg, ${this.accentColor}, ${this.accentColorBright});
+        color: #ffffff;
+        box-shadow: 0 0 15px rgba(184, 134, 11, 0.4);
       }
       
       .speed-control {
@@ -313,7 +325,7 @@ export class Ledger {
       
       .speed-label {
         font-size: 10px;
-        color: #888;
+        color: #666;
         margin-bottom: 4px;
         letter-spacing: 1px;
         text-transform: uppercase;
@@ -322,7 +334,7 @@ export class Ledger {
       .speed-slider {
         width: 100%;
         height: 6px;
-        background: #333;
+        background: #ddd;
         outline: none;
         border-radius: 3px;
       }
@@ -334,7 +346,7 @@ export class Ledger {
         background: ${this.accentColor};
         border-radius: 50%;
         cursor: pointer;
-        box-shadow: 0 0 8px rgba(212, 175, 55, 0.6);
+        box-shadow: 0 0 8px rgba(184, 134, 11, 0.4);
       }
       
       .speed-slider::-moz-range-thumb {
@@ -344,36 +356,37 @@ export class Ledger {
         border-radius: 50%;
         cursor: pointer;
         border: none;
-        box-shadow: 0 0 8px rgba(212, 175, 55, 0.6);
+        box-shadow: 0 0 8px rgba(184, 134, 11, 0.4);
       }
       
       .ledger-body {
         flex: 1;
         overflow-y: auto;
         padding: 16px;
-        background: linear-gradient(180deg, #161511, #121210);
+        background: linear-gradient(180deg, #fafafa, #f5f5f5);
       }
       
       .agents-header {
         font-size: 11px;
-        color: #888;
+        color: #666;
         margin-bottom: 12px;
         letter-spacing: 1px;
         text-transform: uppercase;
-        border-bottom: 1px solid #333;
+        border-bottom: 1px solid #ddd;
         padding-bottom: 8px;
       }
       
       .agent-card {
-        background: linear-gradient(135deg, #1f1e16, #1a1912);
-        border: 1px solid #3a3620;
+        background: linear-gradient(135deg, #ffffff, #f8f8f8);
+        border: 1px solid #e0e0e0;
         border-left: 4px solid ${this.accentColor};
-        margin-bottom: 12px;
-        padding: 14px;
+        margin-bottom: 16px;
+        padding: 20px;
         border-radius: 0 4px 4px 0;
         position: relative;
         overflow: hidden;
         transition: all 0.3s ease;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
       }
       
       .agent-card::before {
@@ -383,7 +396,7 @@ export class Ledger {
         left: 0;
         width: 4px;
         height: 100%;
-        background: linear-gradient(180deg, ${this.accentColor}, ${this.accentColorBright});
+        background: var(--cluster-color, ${this.accentColor});
       }
       
       /* Spawn/Despawn Animations */
@@ -403,43 +416,55 @@ export class Ledger {
         transition: all 0.3s ease;
       }
       
-      .agent-header {
+      .agent-row {
         display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 24px;
+        flex-direction: column;
+        gap: 12px;
+        width: 100%;
       }
       
       .agent-id {
-        font-size: 16px;
+        font-size: 24px;
         font-weight: 700;
-        color: #ffffff;
-        letter-spacing: 1px;
-      }
-      
-      .agent-status {
-        font-size: 12px;
-        padding: 2px 6px;
-        background: ${this.accentColor};
-        color: #000;
-        border-radius: 2px;
-        font-weight: 500;
-        text-transform: uppercase;
+        color: #1a1a1a;
         letter-spacing: 0.5px;
+        line-height: 1.3;
+        margin-bottom: 4px;
       }
       
       .agent-directive {
-        font-size: 24px;
-        color: #bbb;
-        margin-bottom: 8px;
-        line-height: 1.3;
+        font-size: 18px;
+        color: #333;
+        line-height: 1.4;
+        font-weight: 500;
+        margin-bottom: 2px;
+      }
+      
+      .agent-status {
+        font-size: 14px;
+        padding: 8px 12px;
+        background: ${this.accentColor};
+        color: #ffffff;
+        border-radius: 4px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        align-self: flex-start;
+        width: fit-content;
+        margin-bottom: 2px;
+      }
+      
+      /* Special handling for yellow ITP color */
+      .agent-status[style*="#ecb92e"] {
+        color: #2a2a2a !important;
       }
       
       .agent-pathway {
-        font-size: 16px;
-        color: #888;
-        margin-bottom: 10px;
+        font-size: 14px;
+        color: #666;
         font-family: 'JetBrains Mono', monospace;
+        line-height: 1.3;
+        font-weight: 500;
       }
       
       .pathway-arrow {
@@ -448,23 +473,23 @@ export class Ledger {
       }
       
       .agent-progress {
-        margin-top: 24px;
+        margin-top: 10px;
       }
       
       .progress-label {
-        font-size: 16px;
-        color: #888;
+        font-size: 9px;
+        color: #666;
         margin-bottom: 4px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
       
       .progress-bar-container {
-        background: #1a1a1a;
+        background: #e8e8e8;
         height: 8px;
         border-radius: 4px;
         overflow: hidden;
-        border: 1px solid #333;
+        border: 1px solid #ddd;
         position: relative;
       }
       
@@ -482,13 +507,13 @@ export class Ledger {
         right: 0;
         width: 2px;
         height: 100%;
-        background: rgba(255, 255, 255, 0.5);
+        background: rgba(255, 255, 255, 0.8);
         animation: pulse 2s infinite;
       }
       
       .progress-text {
         font-size: 9px;
-        color: #aaa;
+        color: #777;
         margin-top: 4px;
         text-align: right;
       }
@@ -503,7 +528,7 @@ export class Ledger {
       }
       
       .ledger-body::-webkit-scrollbar-track {
-        background: #1a1a1a;
+        background: #f0f0f0;
       }
       
       .ledger-body::-webkit-scrollbar-thumb {

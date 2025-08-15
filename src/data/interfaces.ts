@@ -75,6 +75,8 @@ export interface AgentSpawnData {
   directive_verb?: string; // e.g., "seeking", "pondering"
   directive_noun?: string; // e.g., "social engines"
   projectTitle?: string; // Title of the project this agent represents
+  sourceClusterName?: string; // Name/subject of the source cluster
+  sourceClusterColor?: string; // Color of the source cluster (if protagonist)
 }
 
 // CPU Mirror for Frontier agents (for label rendering)
@@ -91,6 +93,8 @@ export interface FrontierAgentMirror {
   directive_verb: string; // e.g., "seeking", "pondering"
   directive_noun: string; // e.g., "social engines"
   projectTitle: string; // Title of the project this agent represents
+  sourceClusterName: string; // Name/subject of the source cluster
+  sourceClusterColor: string; // Color of the source cluster (if protagonist)
   isActive: boolean;
 }
 

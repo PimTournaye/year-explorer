@@ -17,52 +17,52 @@ vec3 hsv2rgb(vec3 c){
   return c.z*mix(K.xxx,clamp(p-K.xxx,0.,1.),c.y);
 }
 
-void main() {
-    vec4 existingColor = texture2D(u_decayedTrailTexture, v_texCoord);
-    float brightnessDeposit = 0.0;
-    vec3 colorDeposit = vec3(0.0);
-
-    vec2 worldPos = vec2(v_texCoord.x, 1.0 - v_texCoord.y) * u_canvasSize; // Keep the Y-flip
-    int textureSize = int(u_agentTextureSize);
-
-    // Loop through all possible agent slots.
-    // Using a larger loop bound like 128 is safer for bigger textures.
-    for (int y = 0; y < 128; y++) {
-        if (y >= textureSize) break;
-        for (int x = 0; x < 128; x++) {
-            if (x >= textureSize) break;
-
-            vec2 texCoord = (vec2(float(x), float(y)) + 0.5) / u_agentTextureSize;
-            vec4 agentState = texture2D(u_agentStateTexture, texCoord);
-            vec2 agentPos = agentState.xy;
-
-            // This is the only check that matters now.
-            // It finds active agents regardless of their index.
-            if (length(agentPos) < 1.0) continue;
-
-            // If the agent is active, proceed.
-            vec4 agentProperties = texture2D(u_agentPropertiesTexture, texCoord);
-            float isFrontier = agentProperties.z;
-            float clusterHue = agentProperties.a;
-
-            float dist = length(worldPos - agentPos);
-            float influence = smoothstep(10.0, 0.0, dist) * u_trailStrength;
-
-            if (isFrontier > 0.5) {
-                brightnessDeposit += influence;
-            } else {
-                brightnessDeposit += influence * 0.1;
-            }
-
-            if (influence > 0.0) {
-                vec3 clusterColor = hsv2rgb(vec3(clusterHue / 360.0, 0.4, 1.0));
-                colorDeposit += clusterColor * influence * 0.2;
-            }
+void main(){
+  vec4 existingColor=texture2D(u_decayedTrailTexture,v_texCoord);
+  float brightnessDeposit=0.;
+  vec3 colorDeposit=vec3(0.);
+  
+  vec2 worldPos=vec2(v_texCoord.x,1.-v_texCoord.y)*u_canvasSize;// Keep the Y-flip
+  int textureSize=int(u_agentTextureSize);
+  
+  // Loop through all possible agent slots.
+  // Using a larger loop bound like 128 is safer for bigger textures.
+  for(int y=0;y<128;y++){
+    if(y>=textureSize)break;
+    for(int x=0;x<128;x++){
+      if(x>=textureSize)break;
+      
+      vec2 texCoord=(vec2(float(x),float(y))+.5)/u_agentTextureSize;
+      vec4 agentState=texture2D(u_agentStateTexture,texCoord);
+      vec2 agentPos=agentState.xy;
+      
+      // This is the only check that matters now.
+      // It finds active agents regardless of their index.
+      if(length(agentPos)<1.)continue;
+      
+      // If the agent is active, proceed.
+      vec4 agentProperties=texture2D(u_agentPropertiesTexture,texCoord);
+      float isFrontier=agentProperties.z;
+      float clusterHue=agentProperties.a;
+            
+      // NEW: Only Frontier agents can deposit trails.
+      if(isFrontier>.5){
+        float dist=length(worldPos-agentPos);
+        float influence=smoothstep(10.,0.,dist)*u_trailStrength;
+        
+        brightnessDeposit+=influence;
+        
+        if(influence>0.){
+          float clusterHue=agentProperties.a;
+          vec3 clusterColor=hsv2rgb(vec3(clusterHue/360.,.4,1.));
+          colorDeposit+=clusterColor*influence*.2;
         }
+      }
     }
-
-    // The final color combines the old trail, the new brightness, and the new color.
-    gl_FragColor = vec4(existingColor.rgb + colorDeposit + vec3(brightnessDeposit), 1.0);
+  }
+  
+  // The final color combines the old trail, the new brightness, and the new color.
+  gl_FragColor=vec4(existingColor.rgb+colorDeposit+vec3(brightnessDeposit),1.);
 }
 
 // void main() {

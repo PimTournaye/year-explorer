@@ -244,7 +244,7 @@ export class Ledger {
         position: fixed;
         top: 0;
         right: 0;
-        width: 600px;
+        width: 400px;
         height: 100vh;
         background: linear-gradient(180deg, #ffffff 0%, #f8f8f8 100%);
         border-left: 3px solid #080808;

@@ -25,14 +25,15 @@ export class TrailSystem {
   // Screen quad for full-screen passes
   private screenQuadBuffer!: WebGLBuffer;
 
-  // Tuning parameters - SUBTLE SLIME MOLD STYLE
-  private readonly DECAY_FACTOR = 0.98; // Moderate decay for organic feel
-  private readonly TRAIL_STRENGTH = .2; // Subtle strength
+  // Tuning parameters - SOFT TRAIL AESTHETIC WITH LAYERING
+  private readonly DECAY_FACTOR = 0.995; // Slower decay to allow more accumulation
+  private readonly TRAIL_STRENGTH = 0.08; // Lower strength so trails can layer without saturating
 
   // Uniform locations
   private trailUpdateUniforms!: {
     uTrailTexture: WebGLUniformLocation | null;
     uDecayFactor: WebGLUniformLocation | null;
+  uTexelSize: WebGLUniformLocation | null;
   };
 
   private depositionUniforms!: {
@@ -47,7 +48,10 @@ export class TrailSystem {
 
   private trailRenderUniforms!: {
     uTrailTexture: WebGLUniformLocation | null;
-    uThreshold: WebGLUniformLocation | null;
+  uGamma: WebGLUniformLocation | null;
+  uContrast: WebGLUniformLocation | null;
+  uLightColor: WebGLUniformLocation | null;
+  uDarkColor: WebGLUniformLocation | null;
   };
 
   constructor(gl: WebGL2RenderingContext, width: number, height: number) {
@@ -75,13 +79,13 @@ export class TrailSystem {
       this.trailFramebuffers.push(framebuffer);
     }
 
-    // STEP 4 DEBUG: Back to black initialization - trails build up brightness from zero
+    // Initialize to black for black-to-white trail system - agents add brightness
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.trailFramebuffers[0]);
-    gl.clearColor(0, 0, 0, 1); // Black - trails start from zero brightness
+    gl.clearColor(0.0, 0.0, 0.0, 1.0); // Black - agents will add brightness
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.trailFramebuffers[1]);
-    gl.clearColor(0, 0, 0, 1); // Black - trails start from zero brightness  
+    gl.clearColor(0.0, 0.0, 0.0, 1.0); // Black - agents will add brightness
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -98,7 +102,8 @@ export class TrailSystem {
     // Get uniform locations for trail update
     this.trailUpdateUniforms = {
       uTrailTexture: this.trailUpdateShader.getUniformLocation('u_trailTexture'),
-      uDecayFactor: this.trailUpdateShader.getUniformLocation('u_decayFactor')
+  uDecayFactor: this.trailUpdateShader.getUniformLocation('u_decayFactor'),
+  uTexelSize: this.trailUpdateShader.getUniformLocation('u_texelSize')
     };
 
     // Get uniform locations for agent deposition
@@ -114,8 +119,11 @@ export class TrailSystem {
 
     // Get uniform locations for trail rendering
     this.trailRenderUniforms = {
-      uTrailTexture: this.trailRenderShader.getUniformLocation('u_trailTexture'),
-      uThreshold: this.trailRenderShader.getUniformLocation('u_threshold')
+  uTrailTexture: this.trailRenderShader.getUniformLocation('u_trailTexture'),
+  uGamma: this.trailRenderShader.getUniformLocation('u_gamma'),
+  uContrast: this.trailRenderShader.getUniformLocation('u_contrast'),
+    uLightColor: this.trailRenderShader.getUniformLocation('u_lightColor'),
+  uDarkColor: this.trailRenderShader.getUniformLocation('u_darkColor'),
     };
   }
 
@@ -149,6 +157,7 @@ export class TrailSystem {
     gl.bindTexture(gl.TEXTURE_2D, this.trailTextures[this.currentTrailSourceIndex]);
     gl.uniform1i(this.trailUpdateUniforms.uTrailTexture!, 0);
     gl.uniform1f(this.trailUpdateUniforms.uDecayFactor!, this.DECAY_FACTOR);
+  gl.uniform2f(this.trailUpdateUniforms.uTexelSize!, 1.0 / this.width, 1.0 / this.height);
 
     this.drawQuad(this.trailUpdateShader);
 
@@ -219,6 +228,10 @@ export class TrailSystem {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.width, this.height);
 
+    // Clear the canvas to transparent, allowing CSS background to show through
+    gl.clearColor(0.0, 0.0, 0.0, 0.0); // Transparent
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
     this.trailRenderShader.use();
 
     // Bind the final trail texture
@@ -226,11 +239,14 @@ export class TrailSystem {
     gl.bindTexture(gl.TEXTURE_2D, this.trailTextures[this.currentTrailSourceIndex]);
     gl.uniform1i(this.trailRenderUniforms.uTrailTexture!, 0);
 
-    // Set threshold to 0.0 to show EVERYTHING
-    gl.uniform1f(this.trailRenderUniforms.uThreshold!, 0.0);
+  // Tone / shaping parameters (tweak if you want different softness)
+  gl.uniform1f(this.trailRenderUniforms.uGamma!, 0.85);      // < 1 brightens mid-tones
+  gl.uniform1f(this.trailRenderUniforms.uContrast!, 1.4);    // >1 sharpens core lines
+  gl.uniform3f(this.trailRenderUniforms.uLightColor!, 0.94, 0.94, 0.94); // very light base (near UI bg)
+  gl.uniform3f(this.trailRenderUniforms.uDarkColor!, 0.28, 0.28, 0.28);  // lighter max dark per request
 
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); // Standard alpha blending
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); // Standard alpha blending for semi-transparent trails
 
     this.drawQuad(this.trailRenderShader);
 
@@ -263,26 +279,6 @@ export class TrailSystem {
 
     this.trailTextures = [];
     this.trailFramebuffers = [];
-  }
-
-  public reset(): void {
-    const gl = this.gl;
-
-    // Reset ping-pong index
-    this.currentTrailSourceIndex = 0;
-
-    // Clear both trail textures - back to black initialization
-    // Trails build up brightness from zero
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.trailFramebuffers[0]);
-    gl.clearColor(0, 0, 0, 1); // Black - trails start from zero brightness
-    gl.clear(gl.COLOR_BUFFER_BIT);
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.trailFramebuffers[1]);
-    gl.clearColor(0, 0, 0, 1); // Black - trails start from zero brightness  
-    gl.clear(gl.COLOR_BUFFER_BIT);
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    console.log('🔄 TrailSystem reset completed');
   }
 
   public dispose(): void {

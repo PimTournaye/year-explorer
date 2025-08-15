@@ -21,6 +21,8 @@ export class GPUSystem {
   private agentStateFramebuffers: WebGLFramebuffer[] = [];
   private agentPropertiesTextures: WebGLTexture[] = []; // Ping-pong for (age, maxAge, isFrontier, clusterHue)
   private agentPropertiesFramebuffers: WebGLFramebuffer[] = [];
+  private agentTargetTextures: WebGLTexture[] = [];     // Ping-pong for (targetX, targetY, unused, unused)
+  private agentTargetFramebuffers: WebGLFramebuffer[] = [];
 
   private currentAgentSourceIndex: 0 | 1 = 0;
   private agentTextureSize: number;
@@ -47,6 +49,7 @@ export class GPUSystem {
   private agentUpdateUniforms!: {
     uAgentStateTexture: WebGLUniformLocation | null;
     uAgentPropertiesTexture: WebGLUniformLocation | null;
+    uAgentTargetTexture: WebGLUniformLocation | null;
     uTrailTexture: WebGLUniformLocation | null;
     uCanvasSize: WebGLUniformLocation | null;
     uAgentTextureSize: WebGLUniformLocation | null;
@@ -106,6 +109,10 @@ export class GPUSystem {
       const propTex = createFloatTexture(gl, this.agentTextureSize, this.agentTextureSize);
       this.agentPropertiesTextures.push(propTex);
       this.agentPropertiesFramebuffers.push(createFramebuffer(gl, propTex));
+
+      const targetTex = createFloatTexture(gl, this.agentTextureSize, this.agentTextureSize);
+      this.agentTargetTextures.push(targetTex);
+      this.agentTargetFramebuffers.push(createFramebuffer(gl, targetTex));
     }
 
     // Create agent state textures (FLOAT textures for precise agent data)
@@ -125,6 +132,14 @@ export class GPUSystem {
       // Create framebuffer for agent properties
       const propertiesFramebuffer = createFramebuffer(gl, propertiesTexture);
       this.agentPropertiesFramebuffers.push(propertiesFramebuffer);
+
+      // Create agent target textures: (targetX, targetY, unused, unused) in RGBA channels
+      const targetTexture = createFloatTexture(gl, this.agentTextureSize, this.agentTextureSize);
+      this.agentTargetTextures.push(targetTexture);
+
+      // Create framebuffer for agent targets
+      const targetFramebuffer = createFramebuffer(gl, targetTexture);
+      this.agentTargetFramebuffers.push(targetFramebuffer);
     }
 
     // Initialize agent state textures with zeros (no agents)
@@ -134,6 +149,10 @@ export class GPUSystem {
       gl.clear(gl.COLOR_BUFFER_BIT);
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.agentPropertiesFramebuffers[i]);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.agentTargetFramebuffers[i]);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
     }
@@ -211,6 +230,7 @@ export class GPUSystem {
         data.isFrontier ? 1.0 : 0.0,
         data.brightness
       ]);
+      const targetData = new Float32Array([data.targetClusterX, data.targetClusterY, 0.0, 0.0]);
 
       for (let i = 0; i < 2; i++) {
         gl.bindTexture(gl.TEXTURE_2D, this.agentStateTextures[i]);
@@ -218,6 +238,9 @@ export class GPUSystem {
 
         gl.bindTexture(gl.TEXTURE_2D, this.agentPropertiesTextures[i]);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, 1, 1, gl.RGBA, gl.FLOAT, propData);
+
+        gl.bindTexture(gl.TEXTURE_2D, this.agentTargetTextures[i]);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, 1, 1, gl.RGBA, gl.FLOAT, targetData);
       }
 
       if (data.isFrontier) {
@@ -247,6 +270,8 @@ export class GPUSystem {
         gl.bindTexture(gl.TEXTURE_2D, this.agentStateTextures[i]);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, 1, 1, gl.RGBA, gl.FLOAT, empty);
         gl.bindTexture(gl.TEXTURE_2D, this.agentPropertiesTextures[i]);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, 1, 1, gl.RGBA, gl.FLOAT, empty);
+        gl.bindTexture(gl.TEXTURE_2D, this.agentTargetTextures[i]);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, 1, 1, gl.RGBA, gl.FLOAT, empty);
       }
     }
@@ -307,6 +332,11 @@ export class GPUSystem {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.agentPropertiesTextures[this.currentAgentSourceIndex]);
     gl.uniform1i(this.agentUpdateUniforms.uAgentPropertiesTexture!, 1);
+
+    // Bind current agent targets for target-seeking
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.agentTargetTextures[this.currentAgentSourceIndex]);
+    gl.uniform1i(this.agentUpdateUniforms.uAgentTargetTexture!, 2);
 
     // Bind trail texture for sensing
     gl.activeTexture(gl.TEXTURE3);
@@ -517,7 +547,8 @@ export class GPUSystem {
       
       // If the mirror has arrived, add it to the arrivals list for the ping effect.
       // The GPU will kill the agent, and the main GC loop will delete the mirror.
-      if (distToTarget < 15.0 && mirror.age > GRACE_PERIOD_FRAMES) {
+      // Increased proximity threshold to make arrivals more likely
+      if (distToTarget < 30.0 && mirror.age > GRACE_PERIOD_FRAMES) {
         console.log(`🎯 Frontier Agent ${mirror.id} arrived! "${mirror.directive_verb} ${mirror.directive_noun}" from ${mirror.sourceClusterName} → Target reached at (${mirror.targetX.toFixed(1)}, ${mirror.targetY.toFixed(1)})`);
         this.frontierArrivals.push({ x: mirror.targetX, y: mirror.targetY });
         mirror.isActive = false; // Flag it for deletion.
@@ -563,6 +594,15 @@ export class GPUSystem {
       );
     }
 
+    for (let i = 0; i < this.agentTargetTextures.length; i++) {
+      gl.bindTexture(gl.TEXTURE_2D, this.agentTargetTextures[i]);
+      gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.RGBA32F,
+        this.agentTextureSize, this.agentTextureSize, 0,
+        gl.RGBA, gl.FLOAT, emptyData
+      );
+    }
+
     gl.bindTexture(gl.TEXTURE_2D, null);
     console.log('🔄 GPUSystem reset completed');
   }
@@ -586,6 +626,15 @@ export class GPUSystem {
     }
 
     for (const framebuffer of this.agentPropertiesFramebuffers) {
+      gl.deleteFramebuffer(framebuffer);
+    }
+
+    // Cleanup agent target buffers
+    for (const texture of this.agentTargetTextures) {
+      gl.deleteTexture(texture);
+    }
+
+    for (const framebuffer of this.agentTargetFramebuffers) {
       gl.deleteFramebuffer(framebuffer);
     }
 

@@ -2,6 +2,7 @@ precision highp float;
 varying vec2 v_texCoord;
 uniform sampler2D u_agentStateTexture;
 uniform sampler2D u_agentPropertiesTexture;
+uniform sampler2D u_agentTargetTexture;
 uniform sampler2D u_trailTexture;
 uniform vec2 u_canvasSize;
 uniform float u_agentTextureSize;
@@ -31,6 +32,9 @@ void main() {
   
   vec4 properties = texture2D(u_agentPropertiesTexture, v_texCoord);
   float maxAge = properties.y;
+
+  vec4 targetData = texture2D(u_agentTargetTexture, v_texCoord);
+  vec2 targetPosition = targetData.xy;
 
   // Immediately exit for dead agents
   if (maxAge < 1.0) {
@@ -64,9 +68,16 @@ void main() {
   }
   vec2 trailVector = vec2(cos(trailAngle), sin(trailAngle));
 
-  // For now, use simpler trail-following behavior
-  // Target-driven movement will be handled by CPU logic
-  vec2 finalDirection = trailVector;
+  // Force B: Target-Seeking Behavior
+  vec2 toTarget = targetPosition - position;
+  float distanceToTarget = length(toTarget);
+  vec2 targetDirection = distanceToTarget > 0.1 ? normalize(toTarget) : vec2(0.0);
+  
+  // Blend trail-following with target-seeking based on distance to target
+  float targetWeight = min(1.0, distanceToTarget / 100.0); // Stronger when far from target
+  float trailWeight = 1.0 - targetWeight;
+  
+  vec2 finalDirection = normalize(trailVector * trailWeight + targetDirection * targetWeight);
   
   // --- 4. Update and Write New State ---
   vec2 newVelocity = finalDirection * u_agentSpeed;

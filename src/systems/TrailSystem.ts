@@ -25,9 +25,9 @@ export class TrailSystem {
   // Screen quad for full-screen passes
   private screenQuadBuffer!: WebGLBuffer;
 
-  // Tuning parameters - MAXED OUT FOR VISIBILITY
-  private readonly DECAY_FACTOR = 0.99; // Very slow decay
-  private readonly TRAIL_STRENGTH = 5.0; // Super strong trails
+  // Tuning parameters - SUBTLE SLIME MOLD STYLE
+  private readonly DECAY_FACTOR = 0.985; // Moderate decay for organic feel
+  private readonly TRAIL_STRENGTH = 1.0; // Subtle strength
 
   // Uniform locations
   private trailUpdateUniforms!: {
@@ -75,13 +75,13 @@ export class TrailSystem {
       this.trailFramebuffers.push(framebuffer);
     }
 
-    // Initialize trail textures with black
+    // STEP 4 DEBUG: Back to black initialization - trails build up brightness from zero
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.trailFramebuffers[0]);
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(0, 0, 0, 1); // Black - trails start from zero brightness
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.trailFramebuffers[1]);
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(0, 0, 0, 1); // Black - trails start from zero brightness  
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -125,9 +125,8 @@ export class TrailSystem {
     agentTextureSize: number,
     activeAgentCount: number
   ): void {
-    const gl = this.gl; ``
+    const gl = this.gl;
     gl.viewport(0, 0, this.width, this.height);
-
 
     // Pass 1: Trail decay
     this.updateTrails();
@@ -231,8 +230,7 @@ export class TrailSystem {
     gl.uniform1f(this.trailRenderUniforms.uThreshold!, 0.0);
 
     gl.enable(gl.BLEND);
-    // gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); -- dark mode
-    gl.blendFunc(gl.ZERO, gl.SRC_COLOR); // Multiplies the trail color with the background
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); // Standard alpha blending
 
     this.drawQuad(this.trailRenderShader);
 

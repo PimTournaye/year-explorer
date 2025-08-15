@@ -5,14 +5,13 @@ uniform float u_threshold;
 
 void main() {
   vec4 trailColor = texture2D(u_trailTexture, v_texCoord);
-  
-  // Convert to brightness for threshold check
   float brightness = dot(trailColor.rgb, vec3(0.299, 0.587, 0.114));
   
-  // Threshold rendering for "goopy" hard-edged form
+  // For off-white theme: invert bright trails to dark marks
   if (brightness > u_threshold) {
-    // Above threshold: render as solid white
-    gl_FragColor = vec4(trailColor.rgb, 1.0);
+    // Invert the trail: bright trails become dark marks on off-white background
+    vec3 darkTrail = vec3(1.0) - trailColor.rgb;
+    gl_FragColor = vec4(darkTrail, 1.0);
   } else {
     // Below threshold: transparent
     gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);

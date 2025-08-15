@@ -423,7 +423,7 @@ export class Simulation {
 
       // Gatekeeper checks: determine if this bridge *qualifies* to create a Frontier Agent
       const canBeFrontier = currentMirrors.length < 10 && !existingNouns.has(noun);
-
+      
       // The agent's role (and its data) is determined by the gatekeeper checks
       const agentData = this.buildAgentData(
         frontierBridge,

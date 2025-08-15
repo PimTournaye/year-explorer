@@ -81,6 +81,8 @@ export interface AgentSpawnData {
 
 // CPU Mirror for Frontier agents (for label rendering)
 export interface FrontierAgentMirror {
+  targetY: number;
+  targetX: number;
   id: number; // Index in GPU texture
   x: number;
   y: number;

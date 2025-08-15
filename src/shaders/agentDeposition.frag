@@ -45,17 +45,19 @@ void main(){
       float isFrontier=agentProperties.z;
       float clusterHue=agentProperties.a;
             
-      // NEW: Only Frontier agents can deposit trails.
+      // Only Frontier agents can deposit trails
       if(isFrontier>.5){
         float dist=length(worldPos-agentPos);
-        float influence=smoothstep(10.,0.,dist)*u_trailStrength;
+        // Slime mold-like trails: smaller radius, moderate strength
+        float influence=smoothstep(25.,0.,dist)*u_trailStrength*0.3; // Smaller and weaker than original
         
         brightnessDeposit+=influence;
         
         if(influence>0.){
           float clusterHue=agentProperties.a;
-          vec3 clusterColor=hsv2rgb(vec3(clusterHue/360.,.4,1.));
-          colorDeposit+=clusterColor*influence*.2;
+          // Subtle color with some saturation
+          vec3 clusterColor=hsv2rgb(vec3(clusterHue/360.,.3,.9)); // Medium saturation
+          colorDeposit+=clusterColor*influence*0.1; // Less color influence
         }
       }
     }

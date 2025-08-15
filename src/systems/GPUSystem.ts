@@ -14,6 +14,9 @@ export class GPUSystem {
   private width: number;
   private height: number;
 
+  public frontierArrivals: { x: number, y: number }[] = [];
+
+
   // GPU Agent Textures (Simplified to 2 sets)
   private agentStateTextures: WebGLTexture[] = [];      // Ping-pong for (posX, posY, velX, velY)
   private agentStateFramebuffers: WebGLFramebuffer[] = [];
@@ -221,7 +224,9 @@ export class GPUSystem {
           projectTitle: data.projectTitle!,
           sourceClusterName: data.sourceClusterName!,
           sourceClusterColor: data.sourceClusterColor!,
-          isActive: true
+          isActive: true,
+          targetX: data.targetClusterX,
+          targetY: data.targetClusterY
         });
       }
     }
@@ -413,7 +418,20 @@ export class GPUSystem {
   public updateFrontierMirrors(clusterCentroids: Map<number, ClusterInfo>): void {
     // We've already handled dead agent cleanup in the main update method,
     // so we only need to move the living ones.
-    this.updateMirrorMovement(clusterCentroids);
+    this.frontierArrivals = []; // Clear last frame's arrivals
+
+    for (const mirror of this.frontierAgentMirrors.values()) {
+      // ... (existing age and movement logic) ...
+
+      const distToTarget = Math.hypot(mirror.x - mirror.targetX, mirror.y - mirror.targetY);
+
+      // If the mirror has arrived, flag it for a ping and kill it
+      if (distToTarget < 10.0) {
+        this.frontierArrivals.push({ x: mirror.targetX, y: mirror.targetY });
+        mirror.isActive = false; // This will get it garbage collected next frame
+      }
+      this.updateMirrorMovement(clusterCentroids);
+    }
   }
 
   // This is the private helper that contains the actual physics

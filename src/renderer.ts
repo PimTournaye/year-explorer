@@ -58,7 +58,13 @@ export class Renderer {
     this.setupOverlayCanvas();
   }
 
-  public render(showParticles: boolean, protagonistClusters?: Array<{id: number, color: string, name: string}>): void {
+  public render(
+    showParticles: boolean, 
+    protagonistClusters?: Array<{id: number, color: string, name: string}>,
+    currentPhase?: string,
+    phaseTimer?: number,
+    fadeDuration?: number
+  ): void {
     // Clear overlay canvas for 2D elements on top of WebGL
     this.overlayCtx.clearRect(0, 0, this.width, this.height);
 
@@ -73,5 +79,29 @@ export class Renderer {
     this.particleSystem.render(this.overlayCtx, showParticles, protagonistClusters);
     this.effectsSystem.render(this.overlayCtx);
     this.overlayCtx.restore();
+
+    // NEW: Draw the fade overlay on top of everything
+    if (currentPhase && phaseTimer !== undefined && fadeDuration !== undefined) {
+      this.renderFadeOverlay(currentPhase, phaseTimer, fadeDuration);
+    }
+  }
+
+  private renderFadeOverlay(currentPhase: string, phaseTimer: number, fadeDuration: number): void {
+    let alpha = 0.0;
+    
+    if (currentPhase === 'FADING_OUT') {
+      alpha = Math.min(phaseTimer / fadeDuration, 1.0);
+    } else if (currentPhase === 'RESETTING') {
+      alpha = 1.0;
+    } else if (currentPhase === 'FADING_IN') {
+      alpha = 1.0 - Math.min(phaseTimer / fadeDuration, 1.0);
+    }
+
+    if (alpha > 0.0) {
+      this.overlayCtx.fillStyle = '#fafafa'; // The off-white background color
+      this.overlayCtx.globalAlpha = alpha;
+      this.overlayCtx.fillRect(0, 0, this.width, this.height);
+      this.overlayCtx.globalAlpha = 1.0; // Reset alpha
+    }
   }
 }

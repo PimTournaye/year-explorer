@@ -46,7 +46,7 @@ export class Ledger {
     // 4. Create the Year Display (more dramatic)
     this.yearDisplay = document.createElement('div');
     this.yearDisplay.className = 'year-display';
-    this.yearDisplay.textContent = '2087';
+    this.yearDisplay.textContent = '1981';
 
     // 5. Create debug controls panel
     this.controlsPanel = document.createElement('div');
@@ -418,7 +418,7 @@ export class Ledger {
       }
       
       .agent-id {
-        font-size: 20px;
+        font-size: 18px;
         font-weight: 700;
         color: #1a1a1a;
         letter-spacing: 0.5px;
@@ -435,7 +435,7 @@ export class Ledger {
       }
       
       .agent-status {
-        font-size: 14px;
+        font-size: 13px;
         padding: 8px 12px;
         background: ${this.accentColor};
         color: #ffffff;

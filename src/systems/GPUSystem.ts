@@ -515,6 +515,48 @@ export class GPUSystem {
     }
   }
 
+  public reset(): void {
+    // Clear all active agents
+    this.activeAgents.clear();
+    this.frontierAgentMirrors.clear();
+    this.deadFrontierAgents = [];
+    this.frontierArrivals = [];
+
+    // Reset the agent pool - make all slots available
+    this.availableAgentSlots = [];
+    for (let i = 0; i < this.maxAgents; i++) {
+      this.availableAgentSlots.push(i);
+    }
+
+    // Reset ping-pong index
+    this.currentAgentSourceIndex = 0;
+
+    // Clear all agent state textures by rendering empty data
+    const gl = this.gl;
+    const emptyData = new Float32Array(this.agentTextureSize * this.agentTextureSize * 4);
+    
+    for (let i = 0; i < this.agentStateTextures.length; i++) {
+      gl.bindTexture(gl.TEXTURE_2D, this.agentStateTextures[i]);
+      gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.RGBA32F,
+        this.agentTextureSize, this.agentTextureSize, 0,
+        gl.RGBA, gl.FLOAT, emptyData
+      );
+    }
+
+    for (let i = 0; i < this.agentPropertiesTextures.length; i++) {
+      gl.bindTexture(gl.TEXTURE_2D, this.agentPropertiesTextures[i]);
+      gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.RGBA32F,
+        this.agentTextureSize, this.agentTextureSize, 0,
+        gl.RGBA, gl.FLOAT, emptyData
+      );
+    }
+
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    console.log('🔄 GPUSystem reset completed');
+  }
+
 
   public dispose(): void {
     const gl = this.gl;

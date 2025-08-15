@@ -265,6 +265,26 @@ export class TrailSystem {
     this.trailFramebuffers = [];
   }
 
+  public reset(): void {
+    const gl = this.gl;
+
+    // Reset ping-pong index
+    this.currentTrailSourceIndex = 0;
+
+    // Clear both trail textures - back to black initialization
+    // Trails build up brightness from zero
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.trailFramebuffers[0]);
+    gl.clearColor(0, 0, 0, 1); // Black - trails start from zero brightness
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.trailFramebuffers[1]);
+    gl.clearColor(0, 0, 0, 1); // Black - trails start from zero brightness  
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    console.log('🔄 TrailSystem reset completed');
+  }
+
   public dispose(): void {
     const gl = this.gl;
 

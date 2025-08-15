@@ -197,7 +197,12 @@ export class GPUSystem {
       const y = Math.floor(agentIndex / this.agentTextureSize);
 
       const stateData = new Float32Array([data.x, data.y, data.vx, data.vy]);
-      const propData = new Float32Array([data.age, data.maxAge, data.isFrontier ? 1.0 : 0.0, data.clusterHue]);
+      const propData = new Float32Array([
+        data.age,
+        data.maxAge,
+        data.targetClusterX,
+        data.targetClusterY
+      ]);
 
       for (let i = 0; i < 2; i++) {
         gl.bindTexture(gl.TEXTURE_2D, this.agentStateTextures[i]);
@@ -285,7 +290,7 @@ export class GPUSystem {
     gl.uniform1f(this.agentUpdateUniforms.uAgentSpeed!, 0.8); // Much slower movement
     gl.uniform1f(this.agentUpdateUniforms.uSensorDistance!, 15.0);
     gl.uniform1f(this.agentUpdateUniforms.uSensorAngle!, Math.PI / 4);
-    gl.uniform1f(this.agentUpdateUniforms.uTurnStrength!, 0.03); // Much slower turning
+    gl.uniform1f(this.agentUpdateUniforms.uTurnStrength!, 0.15); // Effective organic steering
 
     // Process agent state update
     this.drawQuad(this.agentUpdateShader);
@@ -316,24 +321,24 @@ export class GPUSystem {
   }
 
   private drawQuad(shader: Shader): void {
-  const gl = this.gl;
-  gl.bindBuffer(gl.ARRAY_BUFFER, this.screenQuadBuffer);
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.screenQuadBuffer);
 
-  // Get the attribute location from the SPECIFIC shader program passed in
-  const positionLocation = shader.getAttribLocation('a_position');
-  
-  if (positionLocation >= 0) {
-    gl.enableVertexAttribArray(positionLocation);
-    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-  }
-  
-  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    // Get the attribute location from the SPECIFIC shader program passed in
+    const positionLocation = shader.getAttribLocation('a_position');
 
-  // Good practice: disable the attribute array after drawing
-  if (positionLocation >= 0) {
-    gl.disableVertexAttribArray(positionLocation);
+    if (positionLocation >= 0) {
+      gl.enableVertexAttribArray(positionLocation);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+    }
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    // Good practice: disable the attribute array after drawing
+    if (positionLocation >= 0) {
+      gl.disableVertexAttribArray(positionLocation);
+    }
   }
-}
 
   // GPU Agent Rendering - renders all agents in a single drawArrays call
   public renderToCanvas(): void {

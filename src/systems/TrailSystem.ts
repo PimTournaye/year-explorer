@@ -27,7 +27,7 @@ export class TrailSystem {
 
   // Tuning parameters - SUBTLE SLIME MOLD STYLE
   private readonly DECAY_FACTOR = 0.98; // Moderate decay for organic feel
-  private readonly TRAIL_STRENGTH = .12; // Subtle strength
+  private readonly TRAIL_STRENGTH = .2; // Subtle strength
 
   // Uniform locations
   private trailUpdateUniforms!: {

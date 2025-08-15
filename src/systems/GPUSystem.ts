@@ -188,6 +188,7 @@ export class GPUSystem {
   // Method to spawn agents directly into GPU textures  
   public spawnAgents(agentData: AgentSpawnData[]): void {
     const gl = this.gl;
+    
     for (const data of agentData) {
       if (this.availableAgentSlots.length === 0) {
         console.warn(`No available agent slots.`);
@@ -425,6 +426,49 @@ export class GPUSystem {
     return deadAgents;
   }
 
+  // Sync CPU mirrors with current GPU agent positions
+  private syncMirrorsWithGPU(): void {
+    const gl = this.gl;
+    const textureSize = this.agentTextureSize;
+    
+    // Create a pixel array to read GPU data
+    const pixels = new Float32Array(textureSize * textureSize * 4);
+    
+    // Bind the current agent state texture for reading
+    const currentStateFramebuffer = this.agentStateFramebuffers[this.currentAgentSourceIndex];
+    
+    gl.bindFramebuffer(gl.FRAMEBUFFER, currentStateFramebuffer);
+    gl.readPixels(0, 0, textureSize, textureSize, gl.RGBA, gl.FLOAT, pixels);
+    
+    // Also read agent properties for age data
+    const propPixels = new Float32Array(textureSize * textureSize * 4);
+    const currentPropFramebuffer = this.agentPropertiesFramebuffers[this.currentAgentSourceIndex];
+    
+    gl.bindFramebuffer(gl.FRAMEBUFFER, currentPropFramebuffer);
+    gl.readPixels(0, 0, textureSize, textureSize, gl.RGBA, gl.FLOAT, propPixels);
+    
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    
+    // Update mirrors with GPU data
+    for (const mirror of this.frontierAgentMirrors.values()) {
+      if (!mirror.isActive) continue;
+      
+      // Calculate texture coordinates for this agent
+      const y = Math.floor(mirror.id / textureSize);
+      const x = mirror.id % textureSize;
+      const pixelIndex = (y * textureSize + x) * 4;
+      
+      // Update position from state texture (x, y, vx, vy)
+      mirror.x = pixels[pixelIndex];
+      mirror.y = pixels[pixelIndex + 1];
+      mirror.vx = pixels[pixelIndex + 2];
+      mirror.vy = pixels[pixelIndex + 3];
+      
+      // Update age from properties texture (age, maxAge, isFrontier, clusterHue)
+      mirror.age = propPixels[pixelIndex];
+    }
+  }
+
   // Update CPU mirrors with current GPU data
   // This is the public method called by app.ts every frame
   public updateFrontierMirrors(clusterCentroids: Map<number, ClusterInfo>): void {
@@ -433,13 +477,28 @@ export class GPUSystem {
     //@ts-ignore
     let some = clusterCentroids.get(0); // this is to get a warning message out of the way for unused variable
 
+    // First, sync CPU mirrors with GPU agent data
+    this.syncMirrorsWithGPU();
+
     const GRACE_PERIOD_FRAMES = 5;
 
     for (const mirror of this.frontierAgentMirrors.values()) {
       // If the agent is already marked as inactive, skip it.
       if (!mirror.isActive) continue;
+
       // Check for arrival 
       const distToTarget = Math.hypot(mirror.x - mirror.targetX, mirror.y - mirror.targetY);
+      
+      // DEBUGGING: Monitor the first Frontier agent's progress (reduced frequency)
+      if (mirror.id === Array.from(this.frontierAgentMirrors.keys())[0] && mirror.age % 60 === 0) {
+        console.log(`Agent ${mirror.id}: Dist to Target: ${distToTarget.toFixed(2)}, Age: ${mirror.age}, Max Age: ${mirror.maxAge}`);
+        
+        // Additional debug: Check if agent is about to die without reaching target
+        if (mirror.age > mirror.maxAge - 60 && distToTarget > 10.0) {
+          console.warn(`⚠️ Agent ${mirror.id} will die soon (age: ${mirror.age}/${mirror.maxAge}) but is still ${distToTarget.toFixed(2)} units from target!`);
+        }
+      }
+      
       // An agent arrives if it's close to its target AND has been alive long enough.
       if (distToTarget < 10.0 && mirror.age > GRACE_PERIOD_FRAMES) {
         this.frontierArrivals.push({ x: mirror.targetX, y: mirror.targetY });

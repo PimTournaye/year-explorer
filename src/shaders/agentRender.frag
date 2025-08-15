@@ -29,8 +29,8 @@ void main() {
     // Frontier agents - bright and prominent
     color = vec3(1.0, 0.9, 0.6);
   } else {
-    // Ecosystem agents - dim and subtle
-    color = vec3(0.7, 0.7, 0.9);
+    // Ecosystem agents (including wanderers) - visible grey
+    color = vec3(0.8, 0.8, 0.8); // Light grey for better contrast
   }
 
   // Set the final pixel color with the calculated alpha

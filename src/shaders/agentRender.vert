@@ -25,8 +25,8 @@ void main(){
   float isFrontier=properties.z;
   float brightness=properties.w;
   
-  // Skip inactive agents
-  if(length(position)<1.||v_maxAge<1.){
+  // Skip inactive agents - made less restrictive for debugging
+  if(v_maxAge<1.){
     gl_Position=vec4(-10.,-10.,0.,1.);// Off-screen
     gl_PointSize=0.;
     v_brightness=0.;

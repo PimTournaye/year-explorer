@@ -30,7 +30,7 @@ export class Simulation {
   public readonly PROJECT_ACTIVE_WINDOW_YEARS = 5.0; // Projects fade after this period
 
   // Agent hierarchy configuration
-  private readonly ECOSYSTEM_BRIGHTNESS = 0.3; // Dim brightness for background ecosystem agents
+  private readonly ECOSYSTEM_BRIGHTNESS = 0.6; // Increased brightness for better visibility
   private readonly FRONTIER_BRIGHTNESS = 1.0; // Full brightness for protagonist Frontier agents
 
   // Scoring weights for selecting Frontier agents
@@ -40,8 +40,8 @@ export class Simulation {
 
   // Agent configuration
   private readonly AGENT_SPEED = 2.0; // Base speed for agents
-  private readonly MAX_TOTAL_AGENTS = 350;
-  private readonly MAX_AGENTS_PER_FRAME = 10;
+  private readonly MAX_TOTAL_AGENTS = 350; // Increased from 250
+  private readonly MAX_AGENTS_PER_FRAME = 20; // Increased from 10
   private readonly MIN_SPAWN_SIMILARITY = 0.68; // Minimum similarity score to consider spawning an agent, CAN TWEAK THIS
   // --- New Lifespan Controls ---
   private readonly ECOSYSTEM_LIFESPAN_MIN = 100; // frames
@@ -125,7 +125,8 @@ export class Simulation {
 
     // Detect cross-cluster activity for pathways
     let bridgesInWindow = this.findBridgesInWindow();
-    if (bridgesInWindow.length === 0) return; // Nothing to do if there are no active bridges
+    
+    // Note: We don't return early if no bridges, because we still want to spawn wandering agents
 
 
     // --- 2. Apply the Hard Caps ---
@@ -155,6 +156,59 @@ export class Simulation {
     const agentSpawns = this.createAgentSpawnData(frontierBridge, ecosystemBridges);
 
     if (agentSpawns.length > 0) this.gpuSystem.spawnAgents(agentSpawns);
+
+    // --- NEW: Spawn Intra-Cluster "Wandering" Agents ---
+    const activeClusters = this.particleSystem.getActiveClusters();
+    const clusterCentroids = this.particleSystem.getClusters();
+    const wanderingAgentSpawns: AgentSpawnData[] = [];
+
+    for (const cluster of activeClusters) {
+      // Spawn more wandering agents per active cluster - make it more generous
+      const numToSpawn = Math.min(Math.ceil(cluster.density / 10) + 2, 6); // 2-6 agents per cluster
+
+      for (let i = 0; i < numToSpawn; i++) {
+        // Spawn at a random point within the cluster's general area
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.sqrt(cluster.density) * 4; // Use density for radius
+        const startX = cluster.centerX + Math.cos(angle) * radius;
+        const startY = cluster.centerY + Math.sin(angle) * radius;
+
+        // Generate a unique wanderer ID (using negative numbers to avoid conflicts)
+        const wandererId = -(cluster.id * 10000 + Date.now() % 10000 + i);
+
+        // Create the agent data. We'll reuse the buildAgentData helper.
+        const wanderingAgent = this.buildAgentData(
+          { // Create a "pseudo-bridge" object where the agent's journey is internal
+            project_id: wandererId,
+            source_cluster: cluster.id,
+            target_cluster: cluster.id, // Target is its own cluster
+            year: this.currentYear,
+            similarity_score: 0
+          },
+          false, // Wanderers are always Ecosystem agents
+          new Map([[wandererId.toString(), { x: startX, y: startY }]]), // Provide the position directly
+          clusterCentroids
+        );
+        
+        // Override position and velocity with wandering values
+        if (wanderingAgent) {
+          wanderingAgent.x = startX;
+          wanderingAgent.y = startY;
+          // Apply random direction with the speed already calculated by buildAgentData
+          const randomAngle = Math.random() * Math.PI * 2;
+          const speed = Math.hypot(wanderingAgent.vx, wanderingAgent.vy);
+          wanderingAgent.vx = Math.cos(randomAngle) * speed;
+          wanderingAgent.vy = Math.sin(randomAngle) * speed;
+          // Give them a longer lifespan - 5-15 seconds instead of 1-2 seconds
+          wanderingAgent.maxAge = this.ECOSYSTEM_LIFESPAN_MIN * (3 + Math.random() * 6); // 300-900 frames
+          wanderingAgentSpawns.push(wanderingAgent);
+        }
+      }
+    }
+
+    if (wanderingAgentSpawns.length > 0) {
+      this.gpuSystem.spawnAgents(wanderingAgentSpawns);
+    }
 
     // Mark this year as processed.
     this.lastYearProcessed = currentSimYear;
@@ -322,10 +376,20 @@ export class Simulation {
     sourcePosition.x += (Math.random() - 0.5) * 50; // Random offset in x
     sourcePosition.y += (Math.random() - 0.5) * 50; // Random offset in y
 
-    // Adjust speed based on agent type
+    // --- NEW: Differentiate agent types ---
     let agentSpeed = this.AGENT_SPEED;
+    let maxAge: number;
+    const isWanderer = bridge.source_cluster === bridge.target_cluster;
+
     if (isFrontier) {
-      agentSpeed *= 1.5; // Frontier agents are 50% faster
+      agentSpeed *= 1.5; // Frontier agents are fastest
+      maxAge = this.FRONTIER_LIFESPAN_MIN + Math.random() * (this.FRONTIER_LIFESPAN_MAX - this.FRONTIER_LIFESPAN_MIN);
+    } else if (isWanderer) {
+      agentSpeed *= 0.5; // Wanderers are slowest
+      maxAge = this.ECOSYSTEM_LIFESPAN_MIN * (2 + Math.random() * 4); // Longer lifespan: 200-600 frames (3-10 seconds)
+    } else {
+      // This is a standard Bridge Ecosystem agent
+      maxAge = this.ECOSYSTEM_LIFESPAN_MIN + Math.random() * (this.ECOSYSTEM_LIFESPAN_MAX - this.ECOSYSTEM_LIFESPAN_MIN);
     }
 
     // Add a small random offset to the speed for variation
@@ -335,8 +399,19 @@ export class Simulation {
     const dx = targetCentroid.centerX - sourcePosition.x;
     const dy = targetCentroid.centerY - sourcePosition.y;
     const distance = Math.hypot(dx, dy) || 1;
-    const vx = (dx / distance) * agentSpeed;
-    const vy = (dy / distance) * agentSpeed;
+    
+    let vx: number;
+    let vy: number;
+
+    if (isWanderer) {
+      // Give wanderers a random initial "nudge" instead of a target-driven one
+      const randomAngle = Math.random() * Math.PI * 2;
+      vx = Math.cos(randomAngle) * agentSpeed;
+      vy = Math.sin(randomAngle) * agentSpeed;
+    } else {
+      vx = (dx / distance) * agentSpeed;
+      vy = (dy / distance) * agentSpeed;
+    }
 
     // --- Visuals ---
     const clusterHue = (bridge.source_cluster * 137.508) % 360;
@@ -360,14 +435,6 @@ export class Simulation {
       const sourceCluster = this.data.clusters.find(c => c.id === bridge.source_cluster);
       sourceClusterName = sourceCluster?.topTerms?.[0] || `Cluster ${bridge.source_cluster}`;
       sourceClusterColor = this.getClusterColor(bridge.source_cluster) || '#666666';
-    }
-
-    let maxAge: number;
-    if (isFrontier) {
-      maxAge = this.FRONTIER_LIFESPAN_MIN + Math.random() * (this.FRONTIER_LIFESPAN_MAX - this.FRONTIER_LIFESPAN_MIN);
-      console.log(`🎯 Creating Frontier agent with maxAge: ${Math.round(maxAge)} frames (${Math.round(maxAge/60)} seconds)`);
-    } else {
-      maxAge = this.ECOSYSTEM_LIFESPAN_MIN + Math.random() * (this.ECOSYSTEM_LIFESPAN_MAX - this.ECOSYSTEM_LIFESPAN_MIN);
     }
 
     return {

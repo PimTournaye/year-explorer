@@ -44,21 +44,23 @@ void main(){
       vec4 agentProperties=texture2D(u_agentPropertiesTexture,texCoord);
       float isFrontier=agentProperties.z;
       float clusterHue=agentProperties.a;
-            
-      // Only Frontier agents can deposit trails
+      
+      float dist=length(worldPos-agentPos);
+      // Slime mold-like trails: smaller radius, moderate strength
+      float influence=smoothstep(12.,1.,dist)*u_trailStrength*0.3; // Smaller and weaker than original
+      
       if(isFrontier>.5){
-        float dist=length(worldPos-agentPos);
-        // Slime mold-like trails: smaller radius, moderate strength
-        float influence=smoothstep(12.,1.,dist)*u_trailStrength*0.3; // Smaller and weaker than original
-        
-        brightnessDeposit+=influence;
-        
-        if(influence>0.){
-          float clusterHue=agentProperties.a;
-          // Subtle color with some saturation
-          vec3 clusterColor=hsv2rgb(vec3(clusterHue/360.,.3,.9)); // Medium saturation
-          colorDeposit+=clusterColor*influence*0.1; // Less color influence
-        }
+        brightnessDeposit+=influence; // Strongest trail
+      }else{
+        // This now applies to both Bridge and Wandering Ecosystem agents
+        brightnessDeposit+=influence*0.05; // Very weak trail
+      }
+      
+      if(influence>0.){
+        float clusterHue=agentProperties.a;
+        // Subtle color with some saturation
+        vec3 clusterColor=hsv2rgb(vec3(clusterHue/360.,.3,.9)); // Medium saturation
+        colorDeposit+=clusterColor*influence*0.1; // Less color influence
       }
     }
   }

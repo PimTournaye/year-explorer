@@ -379,7 +379,7 @@ export class Ledger {
       .agent-card {
         background: linear-gradient(135deg, #ffffff, #f8f8f8);
         border: 1px solid #e0e0e0;
-        border-left: 4px solid ${this.accentColor};
+        border-left: 1px solid ${this.accentColor};
         margin-bottom: 16px;
         padding: 20px;
         border-radius: 0 4px 4px 0;

@@ -56,7 +56,11 @@ export class EffectsSystem {
 
       // 2. "Cut out" the inner circle using a counter-clockwise arc
       // This is a standard technique for drawing rings.
-      ctx.arc(ping.x, ping.y, ping.radius - ringThickness, 0, Math.PI * 2, true);
+      // Ensure inner radius is never negative
+      const innerRadius = Math.max(0, ping.radius - ringThickness);
+      if (innerRadius > 0) {
+        ctx.arc(ping.x, ping.y, innerRadius, 0, Math.PI * 2, true);
+      }
 
       // 3. Fill the resulting shape
       ctx.fill();

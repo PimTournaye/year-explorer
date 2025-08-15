@@ -253,10 +253,16 @@ export class GPUSystem {
     const deadAgentIndices: number[] = [];
     for (const [index, agent] of this.activeAgents.entries()) {
       agent.age++;
+      
+      // Check the mirror's status. If it's been flagged as inactive, the agent dies.
+      const mirror = this.frontierAgentMirrors.get(index);
+      const hasArrived = mirror ? !mirror.isActive : false;
+      
       if (this.frontierAgentMirrors.has(index)) {
         this.frontierAgentMirrors.get(index)!.age = agent.age;
       }
-      if (agent.age > agent.maxAge) {
+      
+      if (agent.age > agent.maxAge || hasArrived) {
         deadAgentIndices.push(index);
       }
     }
@@ -499,10 +505,12 @@ export class GPUSystem {
         }
       }
       
-      // An agent arrives if it's close to its target AND has been alive long enough.
-      if (distToTarget < 10.0 && mirror.age > GRACE_PERIOD_FRAMES) {
+      // If the mirror has arrived, add it to the arrivals list for the ping effect.
+      // The GPU will kill the agent, and the main GC loop will delete the mirror.
+      if (distToTarget < 15.0 && mirror.age > GRACE_PERIOD_FRAMES) {
+        console.log(`🎯 Frontier Agent ${mirror.id} arrived! "${mirror.directive_verb} ${mirror.directive_noun}" from ${mirror.sourceClusterName} → Target reached at (${mirror.targetX.toFixed(1)}, ${mirror.targetY.toFixed(1)})`);
         this.frontierArrivals.push({ x: mirror.targetX, y: mirror.targetY });
-        mirror.isActive = false; // Flag for deletion by the main garbage collector
+        mirror.isActive = false; // Flag it for deletion.
       }
     }
   }

@@ -115,7 +115,11 @@ export class SemanticGarden {
   private async initializeWebGL(): Promise<void> {
     console.log('🔍 Attempting WebGL initialization...');
 
-    const gl = this.canvas.getContext('webgl2');
+    const gl = this.canvas.getContext('webgl2', {
+      alpha: true,
+      premultipliedAlpha: false,
+      preserveDrawingBuffer: false
+    });
 
     if (!gl) throw new Error('WebGL 2.0 context creation failed - WebGL 2.0 required for PBO support');
 

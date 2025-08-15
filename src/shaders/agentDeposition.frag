@@ -20,7 +20,6 @@ vec3 hsv2rgb(vec3 c){
 void main(){
   vec4 existingColor=texture2D(u_decayedTrailTexture,v_texCoord);
   float brightnessDeposit=0.;
-  vec3 colorDeposit=vec3(0.);
   
   vec2 worldPos=vec2(v_texCoord.x,1.-v_texCoord.y)*u_canvasSize;// Keep the Y-flip
   int textureSize=int(u_agentTextureSize);
@@ -43,30 +42,23 @@ void main(){
       // If the agent is active, proceed.
       vec4 agentProperties=texture2D(u_agentPropertiesTexture,texCoord);
       float isFrontier=agentProperties.z;
-      float clusterHue=agentProperties.a;
       
       float dist=length(worldPos-agentPos);
-      // Slime mold-like trails: smaller radius, moderate strength
-      float influence=smoothstep(12.,1.,dist)*u_trailStrength*0.3; // Smaller and weaker than original
+      // Soft trail system: moderate radius for organic feel
+      float influence=smoothstep(15.,1.,dist)*u_trailStrength;
       
       if(isFrontier>.5){
-        brightnessDeposit+=influence; // Strongest trail for Frontier agents
+        brightnessDeposit+=influence; // Full strength for Frontier agents
       }else{
-        // Bridge Ecosystem agents - stronger trails for highway effect
-        brightnessDeposit+=influence*0.3; // Increased from 0.05 to 0.3 for visible pathways
-      }
-      
-      if(influence>0.){
-        float clusterHue=agentProperties.a;
-        // Enhanced color for visible pathways
-        vec3 clusterColor=hsv2rgb(vec3(clusterHue/360.,.4,.8)); // Increased saturation
-        colorDeposit+=clusterColor*influence*0.2; // Increased color influence from 0.1 to 0.2
+        // Bridge Ecosystem agents - slightly reduced for variety
+        brightnessDeposit+=influence*0.7; // Reduced but still visible
       }
     }
   }
   
-  // The final color combines the old trail, the new brightness, and the new color.
-  gl_FragColor=vec4(existingColor.rgb-colorDeposit+vec3(brightnessDeposit),1.0);
+  // For black-to-white trail system: add brightness to the black background
+  // The existingColor starts black (0.0) and gets brighter as agents deposit
+  gl_FragColor=vec4(existingColor.rgb+vec3(brightnessDeposit),1.0);
 }
 
 // void main() {

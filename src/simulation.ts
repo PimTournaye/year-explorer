@@ -34,8 +34,8 @@ export class Simulation {
   private readonly FRONTIER_BRIGHTNESS = 1.0; // Full brightness for protagonist Frontier agents
 
   // Scoring weights for selecting Frontier agents
-  private readonly W_RECENCY = 1.5;
-  private readonly W_INTENSITY = 1.0;
+  private readonly W_RECENCY = 1.2;
+  private readonly W_INTENSITY = 1.5; // Increased from 1.0 for better narrative momentum
   private readonly W_BRIDGE_BUILDING = 0.5;
 
   // Agent configuration
@@ -453,7 +453,7 @@ export class Simulation {
     // Get scaled xy positions and cluster centroids from the particle system
     const projectScreenPositions = this.particleSystem.getProjectScreenPositions();
     const clusterCentroids = this.particleSystem.getClusters();
-    // Get existing frontier agent labels to avoid duplicates
+    // Get existing frontier agent mirrors to avoid duplicates and enforce limits
     const currentMirrors = this.gpuSystem.getFrontierAgentMirrors();
     const existingNouns = new Set(currentMirrors.map(m => m.directive_noun));
 
@@ -462,6 +462,7 @@ export class Simulation {
       const noun = this.getDirectiveNoun(frontierBridge.target_cluster);
 
       // Gatekeeper checks: determine if this bridge *qualifies* to create a Frontier Agent
+      // FRONTIER AGENTS ONLY: Limited to 10 total, must have unique directives for narrative clarity
       const canBeFrontier = currentMirrors.length < 10 && !existingNouns.has(noun);
       
       // The agent's role (and its data) is determined by the gatekeeper checks
@@ -476,11 +477,12 @@ export class Simulation {
     }
 
     // Process all Ecosystem Agents with HIGH-DENSITY SPAWNING
+    // ECOSYSTEM AGENTS: No limit on count - can spawn many agents for rich visual density
     const timeScaling = this.calculateTimeBasedScaling();
     console.log(`📈 Year ${Math.floor(this.currentYear)}: Time-based scaling factor: ${timeScaling.toFixed(2)}`);
     
     for (const bridge of ecosystemBridges) {
-      // --- NEW: High-Density Spawn Count with Time-Based Scaling ---
+      // --- HIGH-DENSITY SPAWN: Multiple agents per bridge for visual richness ---
       
       // We'll set a base number and add more based on the connection's strength.
       const BASE_ECO_AGENTS_PER_BRIDGE = 2;

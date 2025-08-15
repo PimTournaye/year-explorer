@@ -31,7 +31,6 @@ void main() {
   
   vec4 properties = texture2D(u_agentPropertiesTexture, v_texCoord);
   float maxAge = properties.y;
-  vec2 targetPosition = properties.zw; // Read targetX/Y from B/A channels
 
   // Immediately exit for dead agents
   if (maxAge < 1.0) {
@@ -65,13 +64,9 @@ void main() {
   }
   vec2 trailVector = vec2(cos(trailAngle), sin(trailAngle));
 
-  // Force B: Target Attraction (A gentle pull to the final destination)
-  vec2 attractionVector = normalize(targetPosition - position);
-
-  // --- 3. Blend the Two Forces ---
-  // A low weight means the agent STRONGLY prefers following trails.
-  float attractionWeight = 0.01; 
-  vec2 finalDirection = normalize(mix(trailVector, attractionVector, attractionWeight));
+  // For now, use simpler trail-following behavior
+  // Target-driven movement will be handled by CPU logic
+  vec2 finalDirection = trailVector;
   
   // --- 4. Update and Write New State ---
   vec2 newVelocity = finalDirection * u_agentSpeed;

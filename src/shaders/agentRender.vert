@@ -22,8 +22,8 @@ void main(){
   vec4 properties=texture2D(u_agentPropertiesTexture,texCoord);
   v_age=properties.x;// R channel stores age
   v_maxAge=properties.y;// G channel stores maxAge
-  float isFrontier=properties.z;
-  float brightness=properties.w;
+  float isFrontier=properties.z;// Z channel stores frontier status
+  float brightness=properties.w;// W channel stores brightness
   
   // Skip inactive agents
   if(length(position)<1.||v_maxAge<1.){

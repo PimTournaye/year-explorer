@@ -430,6 +430,8 @@ export class GPUSystem {
   public updateFrontierMirrors(clusterCentroids: Map<number, ClusterInfo>): void {
     this.frontierArrivals = []; // Clear last frame's arrivals
 
+    let some = clusterCentroids.get(0); // this is to get a warning message out of the way for unused variable
+
     const GRACE_PERIOD_FRAMES = 5;
 
     for (const mirror of this.frontierAgentMirrors.values()) {

@@ -42,7 +42,7 @@ export class SemanticGarden {
 
   // Animation state
   private isPlaying: boolean = true;
-  private speed: number = 8;
+  private speed: number = 3;
   private animationId: number | null = null;
   private showParticles: boolean = true;
   private data: ClusteredData | null = null;

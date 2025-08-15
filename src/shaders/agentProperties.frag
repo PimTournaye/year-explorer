@@ -42,12 +42,10 @@ void main() {
   }
   
   // Agent dies when it exceeds maxAge
-  if (newAge > maxAge) {
-    // Signal a "ping" on death by setting alpha to 1.0
-    // Set maxAge to 0.0 to prevent re-triggering.
-    gl_FragColor = vec4(0.0, 0.0, isFrontier, 1.0); // Pass isFrontier for filtering pings
+  if (age > maxAge) { // Check against the age passed in from the CPU
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0); // Kill the agent
     return;
-  }
+}
   
   gl_FragColor = vec4(newAge, maxAge, isFrontier, brightness);
 }

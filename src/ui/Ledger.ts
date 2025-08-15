@@ -12,6 +12,7 @@ export class Ledger {
   
   // Configuration
   private showDebugControls: boolean = true; // Set to false to hide debug controls
+  private showLifespanProgress: boolean = true; // Set to false to hide lifespan progress bars
   
   private container!: HTMLDivElement;
   private header!: HTMLDivElement;
@@ -145,11 +146,11 @@ export class Ledger {
 
     const agentId = document.createElement('div');
     agentId.className = 'agent-id';
-    agentId.textContent = `AGENT ${agent.id}`;
+    agentId.textContent = agent.projectTitle;
 
     const agentStatus = document.createElement('div');
     agentStatus.className = 'agent-status';
-    agentStatus.textContent = 'ACTIVE';
+    agentStatus.textContent = agent.id.toString();
 
     agentHeader.append(agentId, agentStatus);
 
@@ -161,31 +162,37 @@ export class Ledger {
     agentPathway.className = 'agent-pathway';
     agentPathway.innerHTML = `CLUSTER_${agent.sourceClusterId.toString().padStart(2, '0')} <span class="pathway-arrow">→</span> CLUSTER_${agent.targetClusterId.toString().padStart(2, '0')}`;
 
-    const agentProgress = document.createElement('div');
-    agentProgress.className = 'agent-progress';
+    if (this.showLifespanProgress) {
+      const agentProgress = document.createElement('div');
+      agentProgress.className = 'agent-progress';
 
-    const progressLabel = document.createElement('div');
-    progressLabel.className = 'progress-label';
-    progressLabel.textContent = 'Lifespan Progress';
+      const progressLabel = document.createElement('div');
+      progressLabel.className = 'progress-label';
+      progressLabel.textContent = 'Lifespan Progress';
 
-    const progressBarContainer = document.createElement('div');
-    progressBarContainer.className = 'progress-bar-container';
+      const progressBarContainer = document.createElement('div');
+      progressBarContainer.className = 'progress-bar-container';
 
-    const progressBar = document.createElement('div');
-    progressBar.className = 'progress-bar';
+      const progressBar = document.createElement('div');
+      progressBar.className = 'progress-bar';
 
-    const progressText = document.createElement('div');
-    progressText.className = 'progress-text';
+      const progressText = document.createElement('div');
+      progressText.className = 'progress-text';
 
-    progressBarContainer.appendChild(progressBar);
-    agentProgress.append(progressLabel, progressBarContainer, progressText);
+      progressBarContainer.appendChild(progressBar);
+      agentProgress.append(progressLabel, progressBarContainer, progressText);
 
-    element.append(agentHeader, agentDirective, agentPathway, agentProgress);
+      element.append(agentHeader, agentDirective, agentPathway, agentProgress);
+    } else {
+      element.append(agentHeader, agentDirective, agentPathway);
+    }
 
     return element;
   }
 
   private updateAgentProgress(element: HTMLDivElement, agent: FrontierAgentMirror): void {
+    if (!this.showLifespanProgress) return;
+    
     const progressBar = element.querySelector('.progress-bar') as HTMLDivElement;
     const progressText = element.querySelector('.progress-text') as HTMLDivElement;
     
@@ -230,9 +237,6 @@ export class Ledger {
       @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
       
       .ledger-sidebar {
-        position: fixed;
-        top: 0;
-        right: 0;
         width: 500px;
         height: 100vh;
         background: linear-gradient(180deg, #1a1812 0%, #141410 100%);
@@ -242,7 +246,9 @@ export class Ledger {
         box-shadow: -5px 0 20px rgba(0,0,0,0.7);
         font-family: 'JetBrains Mono', monospace;
         color: #e0e0e0;
-        z-index: 1000;
+        grid-column: 2;
+        box-sizing: border-box;
+        overflow: hidden;
       }
       
       .ledger-header {
@@ -530,6 +536,18 @@ export class Ledger {
   public setDebugControlsVisible(visible: boolean): void {
     this.showDebugControls = visible;
     this.controlsPanel.style.display = visible ? 'flex' : 'none';
+  }
+
+  // Public method to toggle lifespan progress bars
+  public setLifespanProgressVisible(visible: boolean): void {
+    this.showLifespanProgress = visible;
+    // If hiding progress bars, we need to recreate existing agent cards
+    // This is a simple approach - remove all and let them be recreated
+    if (!visible) {
+      this.agentElements.clear();
+      const agentCards = this.body.querySelectorAll('.agent-card');
+      agentCards.forEach(card => card.remove());
+    }
   }
 
   // Public method to remove the ledger

@@ -199,10 +199,10 @@ export class GPUSystem {
       const stateData = new Float32Array([data.x, data.y, data.vx, data.vy]);
       const propData = new Float32Array([data.age, data.maxAge, data.isFrontier ? 1.0 : 0.0, data.clusterHue]);
 
-      // Update both sets of textures to ensure ping-pong works correctly
       for (let i = 0; i < 2; i++) {
         gl.bindTexture(gl.TEXTURE_2D, this.agentStateTextures[i]);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, 1, 1, gl.RGBA, gl.FLOAT, stateData);
+
         gl.bindTexture(gl.TEXTURE_2D, this.agentPropertiesTextures[i]);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, 1, 1, gl.RGBA, gl.FLOAT, propData);
       }
@@ -213,6 +213,7 @@ export class GPUSystem {
           age: data.age, maxAge: data.maxAge,
           sourceClusterId: data.sourceClusterId!, targetClusterId: data.targetClusterId!,
           directive_verb: data.directive_verb!, directive_noun: data.directive_noun!,
+          projectTitle: data.projectTitle!,
           isActive: true
         });
       }
@@ -287,7 +288,7 @@ export class GPUSystem {
     gl.uniform1f(this.agentUpdateUniforms.uTurnStrength!, 0.03); // Much slower turning
 
     // Process agent state update
-    this.drawQuad();
+    this.drawQuad(this.agentUpdateShader);
 
     // Update agent properties (age, death, hierarchy)
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.agentPropertiesFramebuffers[destinationIndex]);
@@ -308,28 +309,31 @@ export class GPUSystem {
     gl.uniform1f(this.agentPropertiesUniforms.uDeltaTime!, 0.3); // Match slower simulation
 
     // Process agent properties update
-    this.drawQuad();
+    this.drawQuad(this.agentUpdateShader);
 
     // Swap buffers
     this.currentAgentSourceIndex = destinationIndex as 0 | 1;
   }
 
-  private drawQuad(): void {
-    const gl = this.gl;
+  private drawQuad(shader: Shader): void {
+  const gl = this.gl;
+  gl.bindBuffer(gl.ARRAY_BUFFER, this.screenQuadBuffer);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.screenQuadBuffer);
-
-    // Get position attribute for currently bound program
-    const currentProgram = gl.getParameter(gl.CURRENT_PROGRAM) as WebGLProgram;
-    const positionLocation = gl.getAttribLocation(currentProgram, 'a_position');
-
-    if (positionLocation >= 0) {
-      gl.enableVertexAttribArray(positionLocation);
-      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-    }
-
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  // Get the attribute location from the SPECIFIC shader program passed in
+  const positionLocation = shader.getAttribLocation('a_position');
+  
+  if (positionLocation >= 0) {
+    gl.enableVertexAttribArray(positionLocation);
+    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
   }
+  
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+  // Good practice: disable the attribute array after drawing
+  if (positionLocation >= 0) {
+    gl.disableVertexAttribArray(positionLocation);
+  }
+}
 
   // GPU Agent Rendering - renders all agents in a single drawArrays call
   public renderToCanvas(): void {

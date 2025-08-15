@@ -12,12 +12,12 @@ export class Simulation {
   private pathwayLastHighlighted: Map<string, number> = new Map(); // Maps "source-target" to first appearance year
 
   // Simulation state
-  public currentYear: number = 1985;
+  public currentYear: number = 1981; // Start year
 
   // Animation parameters (moved from SemanticGarden)
-  public readonly START_YEAR = 1985;
+  public readonly START_YEAR = 1981;
   public readonly END_YEAR = 2025;
-  public readonly YEAR_DURATION = 12000; // 12 seconds per year for contemplative pacing
+  public readonly YEAR_DURATION = 20000;
 
   // Zeitgeist Model - Projects are only active for a limited time window
   public readonly PROJECT_ACTIVE_WINDOW_YEARS = 5.0; // Projects fade after this period
@@ -33,14 +33,20 @@ export class Simulation {
 
   // Agent configuration
   private readonly AGENT_SPEED = 1.5;
-  private readonly AGENT_LIFESPAN = 400; // frames
-  private readonly MAX_TOTAL_AGENTS = 250;
+  private readonly MAX_TOTAL_AGENTS = 350;
   private readonly MAX_AGENTS_PER_FRAME = 10;
-  private readonly MIN_SPAWN_SIMILARITY = 0.68; // Minimum similarity score to consider spawning an agent, CAN TWEAK THIS
+  private readonly MIN_SPAWN_SIMILARITY = 0.72; // Minimum similarity score to consider spawning an agent, CAN TWEAK THIS
+  // --- New Lifespan Controls ---
+  private readonly ECOSYSTEM_LIFESPAN_MIN = 100; // frames
+  private readonly ECOSYSTEM_LIFESPAN_MAX = 4000; // frames
+  private readonly FRONTIER_LIFESPAN_MIN = 8000; // frames
+  private readonly FRONTIER_LIFESPAN_MAX = 12500; // frames
 
   // Canvas dimensions for bounds checking
   private width: number;
   private height: number;
+
+  private lastYearProcessed: number = 0;
 
   constructor(
     particleSystem: ParticleSystem,
@@ -64,13 +70,26 @@ export class Simulation {
   }
 
   public update(): void {
+
+    // --- SECTION 1: PER-FRAME LOGIC ---
+
     // Update particle system with temporal window
     this.particleSystem.update(this.currentYear, this.PROJECT_ACTIVE_WINDOW_YEARS);
 
+    // Clean up expired frontier agent counts periodically
+    this.cleanupFrontierAgents();
+
+
+    // --- SECTION 2: YEARLY TICK LOGIC ---
+    // We have already processed this year, so we don't spawn new agents.
+    const currentSimYear = Math.floor(this.currentYear);
+    if (currentSimYear <= this.lastYearProcessed) return;
+  
+
     // Detect cross-cluster activity for pathways
     let bridgesInWindow = this.findBridgesInWindow();
-
     if (bridgesInWindow.length === 0) return; // Nothing to do if there are no active bridges
+
 
     // --- 2. Apply the Hard Caps ---
     const currentAgentCount = this.gpuSystem.getActiveAgentCount();
@@ -95,12 +114,10 @@ export class Simulation {
     // Spawn agents directly into GPU textures for detected pathway activities
     const agentSpawns = this.createAgentSpawnData(frontierBridge, ecosystemBridges);
 
-    if (agentSpawns.length > 0) {
-      this.gpuSystem.spawnAgents(agentSpawns);
-    }
+    if (agentSpawns.length > 0) this.gpuSystem.spawnAgents(agentSpawns);
 
-    // Clean up expired frontier agent counts periodically
-    this.cleanupFrontierAgents();
+    // Mark this year as processed.
+    this.lastYearProcessed = currentSimYear;
   }
 
   private calculateRecencyScore(sourceCluster: number, targetCluster: number): number {
@@ -217,12 +234,19 @@ export class Simulation {
       return null;
     }
 
+    // Give agents a more noisy starting position
+    sourcePosition.x += (Math.random() - 0.5) * 50; // Random offset in x
+    sourcePosition.y += (Math.random() - 0.5) * 50; // Random offset in y
+
+    // Off set AGENT_SPEED to have some variation in velocity ( default is 1.5, offset by -0.25 to +0.25 )
+    const AGENT_SPEED = this.AGENT_SPEED + (Math.random() - 0.5) * 0.5; // Random offset in speed
+
     // --- Physics ---
     const dx = targetCentroid.centerX - sourcePosition.x;
     const dy = targetCentroid.centerY - sourcePosition.y;
     const distance = Math.hypot(dx, dy) || 1;
-    const vx = (dx / distance) * this.AGENT_SPEED;
-    const vy = (dy / distance) * this.AGENT_SPEED;
+    const vx = (dx / distance) * AGENT_SPEED;
+    const vy = (dy / distance) * AGENT_SPEED;
 
     // --- Visuals ---
     const clusterHue = (bridge.source_cluster * 137.508) % 360;
@@ -230,11 +254,20 @@ export class Simulation {
     // --- UI & Narrative (only for Frontier agents) ---
     let directive_verb: string | undefined;
     let directive_noun: string | undefined;
+    let projectTitle: string | undefined;
 
     if (isFrontier) {
       directive_verb = this.getRandomDirectiveVerb();
       directive_noun = this.getDirectiveNoun(bridge.target_cluster);
+      
+      // Find the project title
+      const project = this.data.projects.find(p => parseInt(p.id) === bridge.project_id);
+      projectTitle = project ? project.title : `Project ${bridge.project_id}`;
     }
+
+    let maxAge: number;
+    (isFrontier) ? maxAge = this.FRONTIER_LIFESPAN_MIN + Math.random() * (this.FRONTIER_LIFESPAN_MAX - this.FRONTIER_LIFESPAN_MIN)
+      : maxAge = this.ECOSYSTEM_LIFESPAN_MIN + Math.random() * (this.ECOSYSTEM_LIFESPAN_MAX - this.ECOSYSTEM_LIFESPAN_MIN);
 
     return {
       x: sourcePosition.x,
@@ -244,7 +277,7 @@ export class Simulation {
       targetClusterX: targetCentroid.centerX,
       targetClusterY: targetCentroid.centerY,
       age: 0,
-      maxAge: this.AGENT_LIFESPAN,
+      maxAge: maxAge,
       isFrontier: isFrontier,
       brightness: isFrontier ? this.FRONTIER_BRIGHTNESS : this.ECOSYSTEM_BRIGHTNESS,
       clusterHue: clusterHue,
@@ -252,6 +285,7 @@ export class Simulation {
       targetClusterId: bridge.target_cluster,
       directive_verb: directive_verb,
       directive_noun: directive_noun,
+      projectTitle: projectTitle,
     };
   }
 

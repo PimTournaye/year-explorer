@@ -34,7 +34,7 @@ export class SemanticGarden {
   private animationId: number | null = null;
   private showParticles: boolean = true;
   private data: ClusteredData | null = null;
-  private ledger: Ledger;
+  private ledger: Ledger | undefined;
   private bridgeData: Bridge[] = [];
 
   constructor() {
@@ -157,6 +157,8 @@ export class SemanticGarden {
     const clusterCentroids = this.particleSystem.getClusters();
     this.gpuSystem.updateFrontierMirrors(clusterCentroids);
 
+    const activeAgentCount = this.gpuSystem.getActiveAgentCount();
+
     this.trailSystem.update(
       this.gpuSystem.getAgentStateTexture(),
       this.gpuSystem.getAgentPropertiesTexture(),
@@ -166,7 +168,7 @@ export class SemanticGarden {
 
     this.renderer.render(this.showParticles); // Pass showParticles to renderer
     if (this.ledger) {
-      this.ledger.update(this.gpuSystem.getFrontierAgentMirrors());
+      this.ledger.update(this.gpuSystem.getFrontierAgentMirrors(), this.simulation.currentYear);
     }
 
     this.updateUI();

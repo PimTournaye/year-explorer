@@ -11,7 +11,7 @@ void main() {
   
   // Threshold rendering for "goopy" hard-edged form
   if (brightness > u_threshold) {
-    // Above threshold: render as solid white (or maintain color for future dye system)
+    // Above threshold: render as solid white
     gl_FragColor = vec4(trailColor.rgb, 1.0);
   } else {
     // Below threshold: transparent

@@ -74,6 +74,7 @@ export interface AgentSpawnData {
   targetClusterId?: number;
   directive_verb?: string; // e.g., "seeking", "pondering"
   directive_noun?: string; // e.g., "social engines"
+  projectTitle?: string; // Title of the project this agent represents
 }
 
 // CPU Mirror for Frontier agents (for label rendering)
@@ -89,6 +90,7 @@ export interface FrontierAgentMirror {
   targetClusterId: number;
   directive_verb: string; // e.g., "seeking", "pondering"
   directive_noun: string; // e.g., "social engines"
+  projectTitle: string; // Title of the project this agent represents
   isActive: boolean;
 }
 

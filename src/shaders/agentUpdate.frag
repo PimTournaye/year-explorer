@@ -2,7 +2,6 @@ precision highp float;
 varying vec2 v_texCoord;
 uniform sampler2D u_agentStateTexture;
 uniform sampler2D u_agentPropertiesTexture;
-uniform sampler2D u_agentExtendedTexture;
 uniform sampler2D u_trailTexture;
 uniform vec2 u_canvasSize;
 uniform float u_agentTextureSize;
@@ -41,14 +40,6 @@ void main() {
     gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0); // Force position and velocity to zero
     return;
   }
-  
-  // Read extended properties for target data
-  // vec4 extended = texture2D(u_agentExtendedTexture, v_texCoord);
-  // vec2 targetPos = extended.yz;
-
-  // NOTE: Arrival detection is now handled in the agentProperties.frag shader
-  // to ensure the "ping" effect triggers correctly upon death.
-  // This shader now focuses only on movement.
 
   // Current angle from velocity
   float currentAngle = atan(velocity.y, velocity.x);
@@ -91,5 +82,7 @@ void main() {
   if (newPosition.y < 0.0) newPosition.y = u_canvasSize.y;
   if (newPosition.y > u_canvasSize.y) newPosition.y = 0.0;
   
-  gl_FragColor = vec4(newPosition, newVelocity);
+  // gl_FragColor = vec4(newPosition, newVelocity);
+  gl_FragColor = vec4(newPosition, 1.0, velocity.y);
+
 }

@@ -42,7 +42,7 @@ export class SemanticGarden {
 
   // Animation state
   private isPlaying: boolean = true;
-  private speed: number = 1;
+  private speed: number = 8;
   private animationId: number | null = null;
   private showParticles: boolean = true;
   private data: ClusteredData | null = null;
@@ -259,7 +259,7 @@ export class SemanticGarden {
       this.simulation.update(); // Only spawn agents in this phase
     }
     
-    this.gpuSystem.update(this.trailSystem.getTrailTexture());
+    this.gpuSystem.update(this.trailSystem.getTrailTexture(), this.simulation.currentYear);
     const clusterCentroids = this.particleSystem.getClusters();
     this.gpuSystem.updateFrontierMirrors(clusterCentroids);
 

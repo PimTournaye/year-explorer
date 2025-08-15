@@ -59,6 +59,10 @@ export class Simulation {
   private height: number;
 
   private lastYearProcessed: number = 0;
+  
+  // Population maintenance throttling
+  private lastPopulationCheck: number = 0;
+  private readonly POPULATION_CHECK_INTERVAL = 1000; // Check every 1 second (in milliseconds)
 
   constructor(
     particleSystem: ParticleSystem,
@@ -113,8 +117,9 @@ export class Simulation {
     // Clean up expired frontier agent counts periodically
     this.cleanupFrontierAgents();
 
-    
-
+    // --- NEW: CONTINUOUS POPULATION MAINTENANCE ---
+    // Ensure we maintain a healthy agent population at all times
+    this.maintainAgentPopulation();
 
     // --- SECTION 2: YEARLY TICK LOGIC ---
     // We have already processed this year, so we don't spawn new agents.
@@ -166,6 +171,70 @@ export class Simulation {
 
     // Mark this year as processed.
     this.lastYearProcessed = currentSimYear;
+  }
+
+  /**
+   * Maintains a target agent population by spawning replacement agents when needed.
+   * This ensures the ecosystem remains visually dense even with timeline-based mortality.
+   */
+  private maintainAgentPopulation(): void {
+    // Throttle population checks to avoid spamming
+    const now = performance.now();
+    if (now - this.lastPopulationCheck < this.POPULATION_CHECK_INTERVAL) {
+      return;
+    }
+    this.lastPopulationCheck = now;
+    
+    const currentAgentCount = this.gpuSystem.getActiveAgentCount();
+    const timeScaling = this.calculateTimeBasedScaling();
+    
+    // Calculate target population based on time scaling
+    const targetPopulation = Math.floor(this.MAX_TOTAL_AGENTS * 0.7 * timeScaling); // 70% of max capacity
+    const shortfall = Math.max(0, targetPopulation - currentAgentCount);
+    
+    if (shortfall === 0) return; // Population is healthy
+    
+    // Limit spawning rate to prevent frame drops
+    const maxSpawnsPerFrame = Math.min(shortfall, 8); // Increased from 5 to spawn more when needed
+    
+    // Get available bridges for spawning
+    let bridgesInWindow = this.findBridgesInWindow();
+    if (bridgesInWindow.length === 0) return; // No bridges available
+    
+    // Sort by similarity score for best quality agents
+    bridgesInWindow.sort((a, b) => b.similarity_score - a.similarity_score);
+    
+    // Create spawn data for population maintenance
+    const agentSpawns: AgentSpawnData[] = [];
+    const projectScreenPositions = this.particleSystem.getProjectScreenPositions();
+    const clusterCentroids = this.particleSystem.getClusters();
+    
+    for (let i = 0; i < maxSpawnsPerFrame && i < bridgesInWindow.length; i++) {
+      const bridge = bridgesInWindow[i % bridgesInWindow.length]; // Cycle through bridges
+      
+      // Prefer ecosystem agents for population maintenance (lighter weight)
+      const isFrontier = false;
+      const agentData = this.buildAgentData(
+        bridge,
+        isFrontier,
+        projectScreenPositions,
+        clusterCentroids
+      );
+      
+      if (agentData) {
+        // Give these maintenance agents shorter lifespans for faster turnover
+        agentData.maxAge *= 0.8;
+        agentSpawns.push(agentData);
+      }
+    }
+    
+    if (agentSpawns.length > 0) {
+      this.gpuSystem.spawnAgents(agentSpawns);
+      // Only log significant population changes to avoid spam
+      if (shortfall > 10) {
+        console.log(`🔄 Population maintenance: Spawned ${agentSpawns.length} agents (${currentAgentCount} -> ${currentAgentCount + agentSpawns.length}, target: ${targetPopulation})`);
+      }
+    }
   }
 
   private calculateRecencyScore(sourceCluster: number, targetCluster: number): number {
@@ -407,6 +476,7 @@ export class Simulation {
       targetClusterY: targetCentroid.centerY,
       age: 0,
       maxAge: maxAge,
+      spawnYear: this.currentYear, // NEW: Stamp with the current simulation year
       isFrontier: isFrontier,
       brightness: isFrontier ? this.FRONTIER_BRIGHTNESS : this.ECOSYSTEM_BRIGHTNESS,
       clusterHue: clusterHue,

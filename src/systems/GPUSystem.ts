@@ -28,7 +28,7 @@ export class GPUSystem {
 
   // Agent Pool Management
   private availableAgentSlots: number[] = [];
-  private activeAgents: Map<number, { age: number; maxAge: number }> = new Map();
+  private activeAgents: Map<number, { age: number; maxAge: number; spawnYear: number }> = new Map();
 
   // CPU Mirror for UI
   private frontierAgentMirrors: Map<number, FrontierAgentMirror> = new Map();
@@ -195,7 +195,11 @@ export class GPUSystem {
         break; // Stop trying to spawn if pool is empty
       }
       const agentIndex = this.availableAgentSlots.pop()!;
-      this.activeAgents.set(agentIndex, { age: data.age, maxAge: Math.round(data.maxAge) });
+      this.activeAgents.set(agentIndex, { 
+        age: data.age, 
+        maxAge: Math.round(data.maxAge),
+        spawnYear: data.spawnYear // Store the spawn year
+      });
 
       const x = agentIndex % this.agentTextureSize;
       const y = Math.floor(agentIndex / this.agentTextureSize);
@@ -249,8 +253,10 @@ export class GPUSystem {
   }
 
   // GPGPU agent update - processes agent logic entirely on GPU
-  public update(trailTexture: WebGLTexture): void {
+  public update(trailTexture: WebGLTexture, currentYear: number): void {
+    const PROJECT_ACTIVE_WINDOW_YEARS = 5.0; // This should match the value in simulation.ts
     const deadAgentIndices: number[] = [];
+    
     for (const [index, agent] of this.activeAgents.entries()) {
       agent.age++;
       
@@ -258,11 +264,15 @@ export class GPUSystem {
       const mirror = this.frontierAgentMirrors.get(index);
       const hasArrived = mirror ? !mirror.isActive : false;
       
+      // NEW: Check if the agent has lived past its conceptual window
+      const hasExceededWindow = (currentYear - agent.spawnYear) > PROJECT_ACTIVE_WINDOW_YEARS;
+      
       if (this.frontierAgentMirrors.has(index)) {
         this.frontierAgentMirrors.get(index)!.age = agent.age;
       }
       
-      if (agent.age > agent.maxAge || hasArrived) {
+      // Agent dies if it's too old OR its era has passed OR it has arrived
+      if (agent.age > agent.maxAge || hasExceededWindow || hasArrived) {
         deadAgentIndices.push(index);
       }
     }

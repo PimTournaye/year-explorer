@@ -64,6 +64,7 @@ export interface AgentSpawnData {
   targetClusterY: number;
   age: number;
   maxAge: number;
+  spawnYear: number; // NEW: Track when this agent was born in simulation time
   // Hierarchy properties
   isFrontier: boolean; // true = Frontier agent (bright, visible), false = Ecosystem agent (dim)
   brightness: number; // 0.0-1.0, visual prominence

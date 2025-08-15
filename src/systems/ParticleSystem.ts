@@ -224,7 +224,7 @@ export class ParticleSystem {
     ctx.save();
 
     // Render protagonist cluster highlights first (behind particles)
-    if (protagonistClusters) {
+    if (protagonistClusters && protagonistClusters.length > 0) {
       this.renderProtagonistClusters(ctx, protagonistClusters);
     }
 
@@ -246,7 +246,7 @@ export class ParticleSystem {
     } else {
       // --- INACTIVE STARFIELD PARTICLE ---
       // This project is not from the current era.
-      finalColor = "rgba(39, 39, 39, 0.3)"; // Dim grey
+      finalColor = "rgba(105, 105, 105, 0.3)"; // Dim grey
       finalSize = 3.0; // Smaller, more subtle
       ctx.globalAlpha = 0.5; // Constant dim alpha
     }
@@ -269,38 +269,33 @@ export class ParticleSystem {
     for (const protagonist of protagonistClusters) {
       const cluster = this.clusters.get(protagonist.id);
       if (!cluster) continue;
-
-      const [centerX, centerY] = this.worldToScreen(cluster.centerX, cluster.centerY);
       
-      // Draw cluster boundary (large circle)
+      const centerX = cluster.centerX;
+      const centerY = cluster.centerY;
+      
+      // Draw cluster boundary (subtle dashed circle)
       ctx.beginPath();
       ctx.arc(centerX, centerY, 120, 0, Math.PI * 2);
       ctx.strokeStyle = protagonist.color;
-      ctx.lineWidth = 3;
-      ctx.setLineDash([10, 5]);
-      ctx.globalAlpha = 0.6;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 4]);
+      ctx.globalAlpha = 0.4;
       ctx.stroke();
       
-      // Draw cluster centroid (bright dot)
+      // Draw cluster centroid (subtle dot)
       ctx.beginPath();
-      ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, 6, 0, Math.PI * 2);
       ctx.fillStyle = protagonist.color;
-      ctx.globalAlpha = 1.0;
+      ctx.globalAlpha = 0.8;
       ctx.fill();
       
       // Add a subtle glow effect
       ctx.beginPath();
-      ctx.arc(centerX, centerY, 15, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, 12, 0, Math.PI * 2);
       ctx.fillStyle = protagonist.color;
-      ctx.globalAlpha = 0.3;
+      ctx.globalAlpha = 0.2;
       ctx.fill();
       
-      // Draw cluster label
-      ctx.font = '14px monospace';
-      ctx.fillStyle = protagonist.color;
-      ctx.globalAlpha = 0.8;
-      ctx.textAlign = 'center';
-      ctx.fillText(protagonist.name, centerX, centerY - 140);
       
       // Reset line dash
       ctx.setLineDash([]);

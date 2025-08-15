@@ -87,14 +87,8 @@ export class Ledger {
     speedControl.append(speedLabel, speedSlider);
     this.controlsPanel.append(playPauseBtn, speedControl);
 
-    // 8. Create agents header
-    const agentsHeader = document.createElement('div');
-    agentsHeader.className = 'agents-header';
-    agentsHeader.innerHTML = 'Active Agents: <span id="agentCount">0</span>';
-
     // 9. Assemble the UI
     this.header.append(this.yearDisplay, this.controlsPanel);
-    this.body.append(agentsHeader);
     this.container.append(this.header, this.body);
     document.body.appendChild(this.container);
   }

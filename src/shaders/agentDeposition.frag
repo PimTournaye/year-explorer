@@ -50,17 +50,17 @@ void main(){
       float influence=smoothstep(12.,1.,dist)*u_trailStrength*0.3; // Smaller and weaker than original
       
       if(isFrontier>.5){
-        brightnessDeposit+=influence; // Strongest trail
+        brightnessDeposit+=influence; // Strongest trail for Frontier agents
       }else{
-        // This now applies to both Bridge and Wandering Ecosystem agents
-        brightnessDeposit+=influence*0.05; // Very weak trail
+        // Bridge Ecosystem agents - stronger trails for highway effect
+        brightnessDeposit+=influence*0.3; // Increased from 0.05 to 0.3 for visible pathways
       }
       
       if(influence>0.){
         float clusterHue=agentProperties.a;
-        // Subtle color with some saturation
-        vec3 clusterColor=hsv2rgb(vec3(clusterHue/360.,.3,.9)); // Medium saturation
-        colorDeposit+=clusterColor*influence*0.1; // Less color influence
+        // Enhanced color for visible pathways
+        vec3 clusterColor=hsv2rgb(vec3(clusterHue/360.,.4,.8)); // Increased saturation
+        colorDeposit+=clusterColor*influence*0.2; // Increased color influence from 0.1 to 0.2
       }
     }
   }

@@ -27,10 +27,10 @@ void main() {
   vec3 color;
   if (v_isFrontier > 0.5) {
     // Frontier agents - bright and prominent
-    color = vec3(1.0, 0.9, 0.6);
+    color = vec3(0.8, 0.3098, 0.2275);
   } else {
     // Ecosystem agents (including wanderers) - visible grey
-    color = vec3(0.8, 0.8, 0.8); // Light grey for better contrast
+    color = vec3(0.0, 0.0, 0.0); // Light grey for better contrast
   }
 
   // Set the final pixel color with the calculated alpha

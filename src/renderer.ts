@@ -1,6 +1,7 @@
 import { GPUSystem } from './systems/GPUSystem';
 import { TrailSystem } from './systems/TrailSystem';
 import { ParticleSystem } from './systems/ParticleSystem';
+import { EffectsSystem } from './systems/EffectsSystem';
 
 export class Renderer {
   private canvas: HTMLCanvasElement;
@@ -9,6 +10,7 @@ export class Renderer {
   private trailSystem: TrailSystem;
   private gpuSystem: GPUSystem;
   private particleSystem: ParticleSystem;
+  private effectsSystem: EffectsSystem;
 
   private width: number;
   private height: number;
@@ -18,6 +20,7 @@ export class Renderer {
     trailSystem: TrailSystem,
     gpuSystem: GPUSystem,
     particleSystem: ParticleSystem,
+    effectsSystem: EffectsSystem,
     width: number,
     height: number
   ) {
@@ -25,6 +28,7 @@ export class Renderer {
     this.trailSystem = trailSystem;
     this.gpuSystem = gpuSystem;
     this.particleSystem = particleSystem;
+    this.effectsSystem = effectsSystem;
     this.width = width;
     this.height = height;
 
@@ -67,6 +71,7 @@ export class Renderer {
     // Render particles and clusters using overlay canvas (on top of WebGL)
     this.overlayCtx.save();
     this.particleSystem.render(this.overlayCtx, showParticles, protagonistClusters);
+    this.effectsSystem.render(this.overlayCtx);
     this.overlayCtx.restore();
   }
 }

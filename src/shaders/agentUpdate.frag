@@ -70,7 +70,7 @@ void main() {
 
   // --- 3. Blend the Two Forces ---
   // A low weight means the agent STRONGLY prefers following trails.
-  float attractionWeight = 0.03; 
+  float attractionWeight = 0.04; 
   vec2 finalDirection = normalize(mix(trailVector, attractionVector, attractionWeight));
   
   // --- 4. Update and Write New State ---

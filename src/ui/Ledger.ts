@@ -55,9 +55,9 @@ export class Ledger {
 
     // 6. Create Play/Pause Button
     const playPauseBtn = document.createElement('button');
-    playPauseBtn.className = 'control-btn';
-    playPauseBtn.textContent = '▶';
-    let isPlaying = false;
+    playPauseBtn.className = 'control-btn playing';
+    playPauseBtn.textContent = '⏸';
+    let isPlaying = true;
     playPauseBtn.onclick = () => {
       isPlaying = !isPlaying;
       playPauseBtn.textContent = isPlaying ? '⏸' : '▶';

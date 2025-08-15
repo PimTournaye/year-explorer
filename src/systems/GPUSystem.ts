@@ -16,7 +16,6 @@ export class GPUSystem {
 
   public frontierArrivals: { x: number, y: number }[] = [];
 
-
   // GPU Agent Textures (Simplified to 2 sets)
   private agentStateTextures: WebGLTexture[] = [];      // Ping-pong for (posX, posY, velX, velY)
   private agentStateFramebuffers: WebGLFramebuffer[] = [];
@@ -33,6 +32,7 @@ export class GPUSystem {
 
   // CPU Mirror for UI
   private frontierAgentMirrors: Map<number, FrontierAgentMirror> = new Map();
+  private deadFrontierAgents: FrontierAgentMirror[] = [];
 
   // Shaders
   private agentUpdateShader: Shader;
@@ -194,7 +194,7 @@ export class GPUSystem {
         break; // Stop trying to spawn if pool is empty
       }
       const agentIndex = this.availableAgentSlots.pop()!;
-      this.activeAgents.set(agentIndex, { age: data.age, maxAge: data.maxAge });
+      this.activeAgents.set(agentIndex, { age: data.age, maxAge: Math.round(data.maxAge) });
 
       const x = agentIndex % this.agentTextureSize;
       const y = Math.floor(agentIndex / this.agentTextureSize);
@@ -203,8 +203,8 @@ export class GPUSystem {
       const propData = new Float32Array([
         data.age,
         data.maxAge,
-        data.targetClusterX,
-        data.targetClusterY
+        data.isFrontier ? 1.0 : 0.0,
+        data.brightness
       ]);
 
       for (let i = 0; i < 2; i++) {
@@ -252,15 +252,19 @@ export class GPUSystem {
     const deadAgentIndices: number[] = [];
     for (const [index, agent] of this.activeAgents.entries()) {
       agent.age++;
+      if (this.frontierAgentMirrors.has(index)) {
+        this.frontierAgentMirrors.get(index)!.age = agent.age;
+      }
       if (agent.age > agent.maxAge) {
-        const isFrontier = this.frontierAgentMirrors.has(index);
-        console.log(`💀 Agent ${index} died: age=${agent.age}, maxAge=${agent.maxAge}, frontier=${isFrontier}`);
         deadAgentIndices.push(index);
       }
     }
     if (deadAgentIndices.length > 0) {
       this.killAgentsOnGPU(deadAgentIndices);
       for (const index of deadAgentIndices) {
+        if (this.frontierAgentMirrors.has(index)) {
+          this.deadFrontierAgents.push(this.frontierAgentMirrors.get(index)!);
+        }
         this.activeAgents.delete(index);
         this.availableAgentSlots.push(index);
         this.frontierAgentMirrors.delete(index);
@@ -299,7 +303,7 @@ export class GPUSystem {
     gl.uniform1f(this.agentUpdateUniforms.uAgentSpeed!, 0.8); // Much slower movement
     gl.uniform1f(this.agentUpdateUniforms.uSensorDistance!, 15.0);
     gl.uniform1f(this.agentUpdateUniforms.uSensorAngle!, Math.PI / 4);
-    gl.uniform1f(this.agentUpdateUniforms.uTurnStrength!, 0.15); // Effective organic steering
+    gl.uniform1f(this.agentUpdateUniforms.uTurnStrength!, 0.1); // Effective organic steering
 
     // Process agent state update
     this.drawQuad(this.agentUpdateShader);
@@ -323,7 +327,7 @@ export class GPUSystem {
     gl.uniform1f(this.agentPropertiesUniforms.uDeltaTime!, 0.3); // Match slower simulation
 
     // Process agent properties update
-    this.drawQuad(this.agentUpdateShader);
+    this.drawQuad(this.agentPropertiesShader);
 
     // Swap buffers
     this.currentAgentSourceIndex = destinationIndex as 0 | 1;
@@ -415,50 +419,29 @@ export class GPUSystem {
     return Array.from(this.frontierAgentMirrors.values()).filter(mirror => mirror.isActive);
   }
 
+  public getDeadFrontierAgents(): FrontierAgentMirror[] {
+    const deadAgents = [...this.deadFrontierAgents];
+    this.deadFrontierAgents = [];
+    return deadAgents;
+  }
+
   // Update CPU mirrors with current GPU data
   // This is the public method called by app.ts every frame
   public updateFrontierMirrors(clusterCentroids: Map<number, ClusterInfo>): void {
-    // We've already handled dead agent cleanup in the main update method,
-    // so we only need to move the living ones.
     this.frontierArrivals = []; // Clear last frame's arrivals
 
-    for (const mirror of this.frontierAgentMirrors.values()) {
-      // ... (existing age and movement logic) ...
+    const GRACE_PERIOD_FRAMES = 5;
 
+    for (const mirror of this.frontierAgentMirrors.values()) {
+      // If the agent is already marked as inactive, skip it.
+      if (!mirror.isActive) continue;
+      // Check for arrival 
       const distToTarget = Math.hypot(mirror.x - mirror.targetX, mirror.y - mirror.targetY);
-
-      // If the mirror has arrived, flag it for a ping and kill it
-      if (distToTarget < 10.0) {
+      // An agent arrives if it's close to its target AND has been alive long enough.
+      if (distToTarget < 10.0 && mirror.age > GRACE_PERIOD_FRAMES) {
         this.frontierArrivals.push({ x: mirror.targetX, y: mirror.targetY });
-        mirror.isActive = false; // This will get it garbage collected next frame
+        mirror.isActive = false; // Flag for deletion by the main garbage collector
       }
-      this.updateMirrorMovement(clusterCentroids);
-    }
-  }
-
-  // This is the private helper that contains the actual physics
-  private updateMirrorMovement(clusterCentroids: Map<number, ClusterInfo>): void {
-    const DAMPING = 0.95;
-    const TARGET_ATTRACTION = 0.002;
-
-    for (const mirror of this.frontierAgentMirrors.values()) {
-      // The main update() method now handles aging and killing,
-      // so we only need to focus on movement here.
-
-      const target = clusterCentroids.get(mirror.targetClusterId);
-      if (target) {
-        const dx = target.centerX - mirror.x;
-        const dy = target.centerY - mirror.y;
-
-        mirror.vx += dx * TARGET_ATTRACTION;
-        mirror.vy += dy * TARGET_ATTRACTION;
-      }
-
-      mirror.vx *= DAMPING;
-      mirror.vy *= DAMPING;
-
-      mirror.x += mirror.vx;
-      mirror.y += mirror.vy;
     }
   }
 

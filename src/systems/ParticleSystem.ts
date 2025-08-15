@@ -304,18 +304,3 @@ export class ParticleSystem {
     ctx.restore();
   }
 }
-
-
-
-// // Render pings
-// for (const ping of this.pings) {
-//   const life = ping.age / ping.maxAge;
-//   const radius = life * 50; // Max radius of 50px
-//   const alpha = 1.0 - life;
-
-//   ctx.beginPath();
-//   ctx.arc(ping.x, ping.y, radius, 0, 2 * Math.PI);
-//   ctx.strokeStyle = `hsla(${ping.hue}, 70%, 65%, ${alpha})`;
-//   ctx.lineWidth = 2;
-//   ctx.stroke();
-// }

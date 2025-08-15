@@ -26,7 +26,7 @@ export class TrailSystem {
   private screenQuadBuffer!: WebGLBuffer;
 
   // Tuning parameters - SUBTLE SLIME MOLD STYLE
-  private readonly DECAY_FACTOR = 0.9; // Moderate decay for organic feel
+  private readonly DECAY_FACTOR = 0.985; // Moderate decay for organic feel
   private readonly TRAIL_STRENGTH = .9; // Subtle strength
 
   // Uniform locations

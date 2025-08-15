@@ -1,4 +1,6 @@
-export interface Ping {
+// --- systems/EffectsSystem.ts ---
+
+interface Ping {
   x: number;
   y: number;
   age: number;
@@ -26,7 +28,7 @@ export class EffectsSystem {
     for (let i = this.pings.length - 1; i >= 0; i--) {
       const ping = this.pings[i];
       ping.age++;
-      
+
       // Animate the radius and remove if dead
       const life_fraction = ping.age / ping.maxAge;
       ping.radius = life_fraction * this.PING_MAX_RADIUS;
@@ -45,12 +47,21 @@ export class EffectsSystem {
       const life_fraction = ping.age / ping.maxAge;
       const alpha = 1.0 - life_fraction; // Fade out
 
+      const ringThickness = 3;
+      ctx.fillStyle = `rgba(30, 30, 30, ${alpha})`;
+
+      // 1. Draw the outer circle
       ctx.beginPath();
       ctx.arc(ping.x, ping.y, ping.radius, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(30, 30, 30, ${alpha})`; // Dark grey for off-white theme
-      ctx.lineWidth = 2;
-      ctx.stroke();
+
+      // 2. "Cut out" the inner circle using a counter-clockwise arc
+      // This is a standard technique for drawing rings.
+      ctx.arc(ping.x, ping.y, ping.radius - ringThickness, 0, Math.PI * 2, true);
+
+      // 3. Fill the resulting shape
+      ctx.fill();
     }
+
     ctx.restore();
   }
 }

@@ -108,6 +108,8 @@ export class Simulation {
     // Clean up expired frontier agent counts periodically
     this.cleanupFrontierAgents();
 
+    
+
 
     // --- SECTION 2: YEARLY TICK LOGIC ---
     // We have already processed this year, so we don't spawn new agents.
@@ -320,15 +322,21 @@ export class Simulation {
     sourcePosition.x += (Math.random() - 0.5) * 50; // Random offset in x
     sourcePosition.y += (Math.random() - 0.5) * 50; // Random offset in y
 
-    // Off set AGENT_SPEED to have some variation in velocity ( default is 1.5, offset by -0.25 to +0.25 )
-    const AGENT_SPEED = this.AGENT_SPEED + (Math.random() - 0.5) * 0.5; // Random offset in speed
+    // Adjust speed based on agent type
+    let agentSpeed = this.AGENT_SPEED;
+    if (isFrontier) {
+      agentSpeed *= 1.5; // Frontier agents are 50% faster
+    }
+
+    // Add a small random offset to the speed for variation
+    agentSpeed += (Math.random() - 0.5) * 0.5;
 
     // --- Physics ---
     const dx = targetCentroid.centerX - sourcePosition.x;
     const dy = targetCentroid.centerY - sourcePosition.y;
     const distance = Math.hypot(dx, dy) || 1;
-    const vx = (dx / distance) * AGENT_SPEED;
-    const vy = (dy / distance) * AGENT_SPEED;
+    const vx = (dx / distance) * agentSpeed;
+    const vy = (dy / distance) * agentSpeed;
 
     // --- Visuals ---
     const clusterHue = (bridge.source_cluster * 137.508) % 360;
@@ -454,9 +462,12 @@ export class Simulation {
     return allSpawnData;
   }
 
-  // TODO: Implement cleanup logic for Frontier agents
   // Clean up frontier agent tracking when agents die
   private cleanupFrontierAgents(): void {
-
+    const deadAgents = this.gpuSystem.getDeadFrontierAgents();
+    for (const mirror of deadAgents) {
+      const key = this.createPathwayKey(mirror.sourceClusterId, mirror.targetClusterId);
+      this.pathwayLastHighlighted.delete(key);
+    }
   }
 }

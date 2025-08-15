@@ -4,6 +4,7 @@ import { ParticleSystem } from './systems/ParticleSystem';
 import { DOMUpdater } from './ui/DOMUpdater';
 import { Simulation } from './simulation';
 import { Renderer } from './renderer'; // New import
+import { EffectsSystem } from './systems/EffectsSystem';
 import { loadBridgeData, loadData } from './data/loader';
 import type { ClusteredData, Bridge } from './data/interfaces';
 import { Ledger } from './ui/Ledger';
@@ -24,6 +25,7 @@ export class SemanticGarden {
   private particleSystem!: ParticleSystem;
   private simulation!: Simulation;
   private renderer!: Renderer; // New property
+  private effectsSystem!: EffectsSystem;
 
   // UI
   private domUpdater: DOMUpdater;
@@ -66,11 +68,14 @@ export class SemanticGarden {
       this.width,
       this.height
     );
+    this.effectsSystem = new EffectsSystem();
+
     this.renderer = new Renderer(
       this.canvas,
       this.trailSystem,
       this.gpuSystem,
       this.particleSystem,
+      this.effectsSystem,
       this.width,
       this.height
     );
@@ -89,7 +94,8 @@ export class SemanticGarden {
     window.addEventListener('resize', () => this.handleResize());
 
     // Start the render loop
-    this.animate();
+    this.render();
+    this.startAnimation();
   }
 
   private setupCanvas(): void {
@@ -157,6 +163,15 @@ export class SemanticGarden {
     const clusterCentroids = this.particleSystem.getClusters();
     this.gpuSystem.updateFrontierMirrors(clusterCentroids);
 
+    // --- NEW: Trigger pings ---
+    const arrivals = this.gpuSystem.frontierArrivals;
+    if (arrivals.length > 0) {
+      for (const arrival of arrivals) {
+        this.effectsSystem.createPing(arrival.x, arrival.y);
+      }
+    }
+    this.effectsSystem.update();
+
     this.trailSystem.update(
       this.gpuSystem.getAgentStateTexture(),
       this.gpuSystem.getAgentPropertiesTexture(),
@@ -165,7 +180,7 @@ export class SemanticGarden {
     );
 
     const protagonistClusters = this.simulation.getProtagonistClusters();
-    this.renderer.render(this.showParticles, protagonistClusters); // Pass showParticles and protagonist clusters to renderer
+        this.renderer.render(this.showParticles, protagonistClusters); // Pass showParticles and protagonist clusters to renderer // Pass showParticles and protagonist clusters to renderer
     if (this.ledger) {
       this.ledger.update(this.gpuSystem.getFrontierAgentMirrors(), this.simulation.currentYear);
     }

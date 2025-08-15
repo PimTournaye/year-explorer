@@ -232,8 +232,8 @@ export class ParticleSystem {
       // --- ACTIVE CONSTELLATION PARTICLE ---
       // This project's year is within the current time window.
       const clusterHue = (particle.clusterId * 137.508) % 360;
-      finalColor = `hsl(${clusterHue}, 90%, 70%)`; // Bright, saturated cluster color
-      finalSize = 2.0; // Larger and more visible
+      finalColor = `hsl(${clusterHue}, 90%, 70%)`; // TODO: change to dedicated cluster color
+      finalSize = 5.0; // Larger and more visible
       
       // Use the particle's alpha for the smooth fade-in effect.
       ctx.globalAlpha = particle.alpha; 

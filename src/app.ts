@@ -157,8 +157,6 @@ export class SemanticGarden {
     const clusterCentroids = this.particleSystem.getClusters();
     this.gpuSystem.updateFrontierMirrors(clusterCentroids);
 
-    const activeAgentCount = this.gpuSystem.getActiveAgentCount();
-
     this.trailSystem.update(
       this.gpuSystem.getAgentStateTexture(),
       this.gpuSystem.getAgentPropertiesTexture(),
@@ -181,7 +179,7 @@ export class SemanticGarden {
       activeClusters: this.particleSystem.getActiveClusters().length,
       activeAgents: this.gpuSystem.getActiveAgentCount()
     });
-    this.ledger.update(this.gpuSystem.getFrontierAgentMirrors(), this.simulation.currentYear);
+    this.ledger!.update(this.gpuSystem.getFrontierAgentMirrors(), this.simulation.currentYear);
   }
 
   private animate(): void {

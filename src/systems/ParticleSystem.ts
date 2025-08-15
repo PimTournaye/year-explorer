@@ -3,7 +3,7 @@ import type { ClusteredData, PersistentParticle, ClusterInfo } from '../data/int
 export class ParticleSystem {
   private persistentParticles: PersistentParticle[] = [];
   private clusters: Map<number, ClusterInfo> = new Map();
-  private pings: Ping[] = [];
+  private pings: { x: number, y: number, hue: number, age: number, maxAge: number }[] = [];
 
   // Configuration
   private readonly MARGIN = 75; // Reduced from 150 to 75 for better screen usage

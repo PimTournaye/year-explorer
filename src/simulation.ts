@@ -35,7 +35,7 @@ export class Simulation {
   private readonly AGENT_SPEED = 1.5;
   private readonly MAX_TOTAL_AGENTS = 350;
   private readonly MAX_AGENTS_PER_FRAME = 10;
-  private readonly MIN_SPAWN_SIMILARITY = 0.72; // Minimum similarity score to consider spawning an agent, CAN TWEAK THIS
+  private readonly MIN_SPAWN_SIMILARITY = 0.68; // Minimum similarity score to consider spawning an agent, CAN TWEAK THIS
   // --- New Lifespan Controls ---
   private readonly ECOSYSTEM_LIFESPAN_MIN = 100; // frames
   private readonly ECOSYSTEM_LIFESPAN_MAX = 4000; // frames

@@ -4,17 +4,18 @@ import { serveDir } from "https://deno.land/std/http/file_server.ts";
 serve(async (req) => {
   const url = new URL(req.url);
   
-  // API routes
+  // API route for version checking
   if (url.pathname === "/api/version") {
-    const version = Deno.env.get("APP_VERSION") || "unknown";
+    const version = Deno.env.get("APP_VERSION") || Date.now().toString();
     return new Response(version, {
       headers: { "Content-Type": "text/plain" },
     });
   }
 
-  // Serve built static files from dist directory
+  // Serve everything from dist folder
   return serveDir(req, {
     fsRoot: "./dist",
+    urlRoot: "",
     showDirListing: false,
   });
 });

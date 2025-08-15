@@ -12,7 +12,7 @@ export class Ledger {
   
   // Configuration
   private showDebugControls: boolean = true; // Set to false to hide debug controls
-  private showLifespanProgress: boolean = true; // Set to false to hide lifespan progress bars
+  private showLifespanProgress: boolean = false; // Set to false to hide lifespan progress bars
   
   private container!: HTMLDivElement;
   private header!: HTMLDivElement;

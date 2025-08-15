@@ -219,58 +219,57 @@ export class ParticleSystem {
   }
 
   public render(ctx: CanvasRenderingContext2D, showParticles: boolean): void {
+    if (!showParticles) return;
+
     ctx.save();
 
-    // Render pings
-    for (const ping of this.pings) {
-      const life = ping.age / ping.maxAge;
-      const radius = life * 50; // Max radius of 50px
-      const alpha = 1.0 - life;
+    // This loop ensures all 2744 projects are always on screen.
+  for (const particle of this.persistentParticles) {
+    let finalColor: string;
+    let finalSize: number;
 
-      ctx.beginPath();
-      ctx.arc(ping.x, ping.y, radius, 0, 2 * Math.PI);
-      ctx.strokeStyle = `hsla(${ping.hue}, 70%, 65%, ${alpha})`;
-      ctx.lineWidth = 2;
-      ctx.stroke();
+    if (particle.isActive) {
+      // --- ACTIVE CONSTELLATION PARTICLE ---
+      // This project's year is within the current time window.
+      const clusterHue = (particle.clusterId * 137.508) % 360;
+      finalColor = `hsl(${clusterHue}, 90%, 70%)`; // Bright, saturated cluster color
+      finalSize = 2.0; // Larger and more visible
+      
+      // Use the particle's alpha for the smooth fade-in effect.
+      ctx.globalAlpha = particle.alpha; 
+
+    } else {
+      // --- INACTIVE STARFIELD PARTICLE ---
+      // This project is not from the current era.
+      finalColor = "rgba(204, 200, 200, 0.3)"; // Dim grey
+      finalSize = 3.0; // Smaller, more subtle
+      ctx.globalAlpha = 0.5; // Constant dim alpha
     }
 
-    // Render active cluster indicators for narrative clarity
-    for (const cluster of this.clusters.values()) {
-      if (cluster.isActive) {
-        const activeParticles = cluster.particles.filter(p => p.isActive).length;
-        const pulse = 1 + (activeParticles / cluster.particles.length) * 2; // Pulse strength based on active particle ratio
-        const radius = Math.sqrt(cluster.density) * 4 * pulse;
-
-        ctx.beginPath();
-        ctx.arc(cluster.centerX, cluster.centerY, radius, 0, 2 * Math.PI);
-        ctx.strokeStyle = `hsla(${(cluster.id * 137.508) % 360}, 70%, 65%, 0.1)`;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-    }
-
-    if (showParticles) {
-      // Optimized rendering loop
-      for (const particle of this.persistentParticles) {
-        if (particle.alpha < 0.01) continue;
-
-        if (!particle.isActive) {
-          // STARFIELD: Dim grey dots
-          ctx.fillStyle = `rgba(100, 100, 100, ${particle.alpha})`;
-          ctx.beginPath();
-          ctx.arc(particle.currentX, particle.currentY, particle.size, 0, 2 * Math.PI);
-          ctx.fill();
-        } else {
-          // CONSTELLATION: Bright, saturated colors
-          const clusterHue = (particle.clusterId * 137.508) % 360;
-          ctx.fillStyle = `hsla(${clusterHue}, 70%, 65%, ${particle.alpha})`;
-          ctx.beginPath();
-          ctx.arc(particle.currentX, particle.currentY, particle.size, 0, 2 * Math.PI);
-          ctx.fill();
-        }
-      }
-    }
-
-    ctx.restore();
+    // --- Draw the particle as a circle ---
+    ctx.beginPath();
+    ctx.arc(particle.currentX, particle.currentY, finalSize, 0, Math.PI * 2);
+    ctx.fillStyle = finalColor;
+    ctx.fill();
+  }
+  
+  // Reset global alpha so other rendering isn't affected.
+  ctx.globalAlpha = 1.0; 
+  ctx.restore();
   }
 }
+
+
+
+// // Render pings
+// for (const ping of this.pings) {
+//   const life = ping.age / ping.maxAge;
+//   const radius = life * 50; // Max radius of 50px
+//   const alpha = 1.0 - life;
+
+//   ctx.beginPath();
+//   ctx.arc(ping.x, ping.y, radius, 0, 2 * Math.PI);
+//   ctx.strokeStyle = `hsla(${ping.hue}, 70%, 65%, ${alpha})`;
+//   ctx.lineWidth = 2;
+//   ctx.stroke();
+// }

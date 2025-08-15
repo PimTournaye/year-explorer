@@ -5,6 +5,9 @@ uniform float u_agentTextureSize;
 uniform vec2 u_canvasSize;
 varying float v_brightness;
 varying float v_isFrontier;
+varying float v_age;
+varying float v_maxAge;
+
 
 void main() {
   // Convert agent index to texture coordinates
@@ -24,7 +27,7 @@ void main() {
   float brightness = properties.w;
   
   // Skip inactive agents
-  if (length(position) < 1.0 || maxAge < 1.0) {
+  if (length(position) < 1.0 || v_maxAge < 1.0) {
     gl_Position = vec4(-10.0, -10.0, 0.0, 1.0); // Off-screen
     gl_PointSize = 0.0;
     v_brightness = 0.0;
@@ -33,7 +36,7 @@ void main() {
   }
   
   // Calculate life fraction for smooth fade-in/out
-  float lifeFraction = age / maxAge;
+  float lifeFraction = v_age / v_maxAge;
   
   // Fade-in during first 20% of life, fade-out during last 20% of life
   float fadeInFactor = smoothstep(0.0, 0.2, lifeFraction);
@@ -48,6 +51,8 @@ void main() {
   gl_PointSize = isFrontier > 0.5 ? 8.0 : 3.0;
   
   // Pass properties to fragment shader with lifecycle fading applied
+  v_age = properties.x;
+  v_maxAge = properties.y;
   v_brightness = brightness * lifeCycleFade;
   v_isFrontier = isFrontier;
 }

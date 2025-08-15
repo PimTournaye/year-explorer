@@ -34,6 +34,9 @@ export class Simulation {
   // Agent configuration
   private readonly AGENT_SPEED = 1.5;
   private readonly AGENT_LIFESPAN = 400; // frames
+  private readonly MAX_TOTAL_AGENTS = 250;
+  private readonly MAX_AGENTS_PER_FRAME = 10;
+  private readonly MIN_SPAWN_SIMILARITY = 0.68; // Minimum similarity score to consider spawning an agent, CAN TWEAK THIS
 
   // Canvas dimensions for bounds checking
   private width: number;
@@ -61,17 +64,33 @@ export class Simulation {
   }
 
   public update(): void {
-    // Update particle system with Zeitgeist temporal window
+    // Update particle system with temporal window
     this.particleSystem.update(this.currentYear, this.PROJECT_ACTIVE_WINDOW_YEARS);
 
     // Detect cross-cluster activity for pathways
-    const bridgesInWindow = this.findBridgesInWindow();
+    let bridgesInWindow = this.findBridgesInWindow();
 
     if (bridgesInWindow.length === 0) return; // Nothing to do if there are no active bridges
 
-    // If there are connections, start selecting agents as frontier agents
+    // --- 2. Apply the Hard Caps ---
+    const currentAgentCount = this.gpuSystem.getActiveAgentCount();
+    const availableSlots = this.MAX_TOTAL_AGENTS - currentAgentCount;
+
+    if (bridgesInWindow.length > availableSlots) {
+      // If we have more potential spawns than available slots,
+      // prioritize the best ones by sorting by similarity score.
+      bridgesInWindow.sort((a, b) => b.similarity_score - a.similarity_score);
+      bridgesInWindow = bridgesInWindow.slice(0, availableSlots);
+    }
+
+    if (bridgesInWindow.length > this.MAX_AGENTS_PER_FRAME) {
+      // Further cap the number of spawns in this single frame.
+      bridgesInWindow = bridgesInWindow.slice(0, this.MAX_AGENTS_PER_FRAME);
+    }
+
+    // --- 3. Proceed with the (now strictly limited) list of bridges ---
     const frontierBridge = this.selectFrontierBridge(bridgesInWindow);
-    const ecosystemBridges = bridgesInWindow.filter(bridge => bridge !== frontierBridge);
+    const ecosystemBridges = bridgesInWindow.filter(b => b !== frontierBridge);
 
     // Spawn agents directly into GPU textures for detected pathway activities
     const agentSpawns = this.createAgentSpawnData(frontierBridge, ecosystemBridges);
@@ -160,18 +179,105 @@ export class Simulation {
    * Detects cross-cluster activities based on project data and bridge data.
    * Filters the bridges dats to return only those bridges whose year falls within the currentYear's active window.
    */
-  private findBridgesInWindow() {
+  private findBridgesInWindow(): Bridge[] {
     const windowStart = this.currentYear - this.PROJECT_ACTIVE_WINDOW_YEARS;
     const windowEnd = this.currentYear;
 
-    return this.bridgeData.filter(bridge =>
+    const bridgesInTime = this.bridgeData.filter(bridge =>
       bridge.year >= windowStart && bridge.year <= windowEnd
     );
+
+    const highQualityBridges = bridgesInTime.filter(b => b.similarity_score > this.MIN_SPAWN_SIMILARITY);
+
+    // TEMPORARY DEBUG LOG
+    if (highQualityBridges.length > 0) {
+      console.log(`Year ${Math.floor(this.currentYear)}: Found ${highQualityBridges.length} high-quality bridges.`);
+    }
+
+    return highQualityBridges;
   }
 
   // This creates a unique sorted key for each pathway / source-target pair
   private createPathwayKey(sourceCluster: number, targetCluster: number): string {
     return `${Math.min(sourceCluster, targetCluster)}-${Math.max(sourceCluster, targetCluster)}`;
+  }
+
+  private buildAgentData(
+    bridge: Bridge,
+    isFrontier: boolean,
+    projectPositions: Map<string, { x: number; y: number }>,
+    clusterCentroids: Map<number, any>
+  ): AgentSpawnData | null {
+    const sourcePosition = projectPositions.get(bridge.project_id.toString());
+    const targetCentroid = clusterCentroids.get(bridge.target_cluster);
+
+    // If we can't find coordinates, we cannot create an agent.
+    if (!sourcePosition || !targetCentroid) {
+      console.warn(`Could not find screen positions for bridge from project ${bridge.project_id}.`);
+      return null;
+    }
+
+    // --- Physics ---
+    const dx = targetCentroid.centerX - sourcePosition.x;
+    const dy = targetCentroid.centerY - sourcePosition.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    const vx = (dx / distance) * this.AGENT_SPEED;
+    const vy = (dy / distance) * this.AGENT_SPEED;
+
+    // --- Visuals ---
+    const clusterHue = (bridge.source_cluster * 137.508) % 360;
+
+    // --- UI & Narrative (only for Frontier agents) ---
+    let directive_verb: string | undefined;
+    let directive_noun: string | undefined;
+
+    if (isFrontier) {
+      directive_verb = this.getRandomDirectiveVerb();
+      directive_noun = this.getDirectiveNoun(bridge.target_cluster);
+    }
+
+    return {
+      x: sourcePosition.x,
+      y: sourcePosition.y,
+      vx: vx,
+      vy: vy,
+      targetClusterX: targetCentroid.centerX,
+      targetClusterY: targetCentroid.centerY,
+      age: 0,
+      maxAge: this.AGENT_LIFESPAN,
+      isFrontier: isFrontier,
+      brightness: isFrontier ? this.FRONTIER_BRIGHTNESS : this.ECOSYSTEM_BRIGHTNESS,
+      clusterHue: clusterHue,
+      sourceClusterId: bridge.source_cluster,
+      targetClusterId: bridge.target_cluster,
+      directive_verb: directive_verb,
+      directive_noun: directive_noun,
+    };
+  }
+
+  /**
+   * Gets the primary theme for a cluster and truncates it.
+   */
+  private getDirectiveNoun(targetClusterId: number): string {
+    const MAX_LABEL_WORDS = 5;
+    const targetClusterData = this.data.clusters.find(c => c.id === targetClusterId);
+    let noun = targetClusterData?.topTerms[0] || `cluster ${targetClusterId}`;
+
+    if (noun.split(' ').length > MAX_LABEL_WORDS) {
+      noun = noun.split(' ').slice(0, MAX_LABEL_WORDS).join(' ') + '...';
+    }
+    return noun;
+  }
+
+  /**
+   * Returns a random verb for a Frontier agent's directive.
+   */
+  private getRandomDirectiveVerb(): string {
+    const choices = [
+      'seeking', 'exploring', 'navigating', 'pursuing', 'musing over',
+      'pondering', 'examining', 'reflecting on', 'considering', 'contemplating'
+    ];
+    return choices[Math.floor(Math.random() * choices.length)];
   }
 
 
@@ -182,156 +288,44 @@ export class Simulation {
     // Get scaled xy positions and cluster centroids from the particle system
     const projectScreenPositions = this.particleSystem.getProjectScreenPositions();
     const clusterCentroids = this.particleSystem.getClusters();
-
     // Get existing frontier agent labels to avoid duplicates
     const currentMirrors = this.gpuSystem.getFrontierAgentMirrors();
-    const existingLabels = new Set<string>();
-    currentMirrors.forEach(agent => {
-      if (agent.label) {
-        existingLabels.add(agent.label);
-      }
-    });
+    const existingNouns = new Set(currentMirrors.map(m => m.directive_noun));
 
     // Process the Frontier Agent (protagonist agent with highest priority)
-    if (frontierBridge !== null) {
-      // Look up the source project's position
-      const sourcePosition = projectScreenPositions.get(frontierBridge.project_id.toString());
+    if (frontierBridge) {
+      const noun = this.getDirectiveNoun(frontierBridge.target_cluster);
 
-      // Look up the target cluster's centroid position
-      const targetPosition = clusterCentroids.get(frontierBridge.target_cluster);
+      // Gatekeeper checks: determine if this bridge *qualifies* to create a Frontier Agent
+      const canBeFrontier = currentMirrors.length < 10 && !existingNouns.has(noun);
 
-      // If we can't find the coordinates, we can't spawn the agent. Skip and continue.
-      if (!sourcePosition || !targetPosition) {
-        return allSpawnData;
-      } else {
-        // Calculate initial velocity
-        const dx = targetPosition.centerX - sourcePosition.x;
-        const dy = targetPosition.centerY - sourcePosition.y;
-        const distance = Math.hypot(dx, dy) || 1; // Avoid division by zero
-        const vx = (dx / distance) * this.AGENT_SPEED;
-        const vy = (dy / distance) * this.AGENT_SPEED;
+      // The agent's role (and its data) is determined by the gatekeeper checks
+      const agentData = this.buildAgentData(
+        frontierBridge,
+        canBeFrontier,
+        projectScreenPositions,
+        clusterCentroids
+      );
 
-        const targetClusterData = this.data.clusters.find(c => c.id === frontierBridge.target_cluster);
-        let label = `${targetClusterData?.topTerms[0] || `cluster ${frontierBridge.target_cluster}`}`;
-
-        // 2. Enforce Max Length Rule
-        const MAX_LABEL_WORDS = 5;
-        if (label.split(' ').length > MAX_LABEL_WORDS) {
-          label = label.split(' ').slice(0, MAX_LABEL_WORDS).join(' ') + '...';
-        }
-
-        // Check 1: Is the Ledger already full?
-        if (currentMirrors.length >= 10 || existingLabels.has(label)) return allSpawnData;
-
-        // Calculate cluster hue for trail coloring
-        const clusterHue = (frontierBridge.source_cluster * 137.508) % 360; // not sure about value
-
-        // Check constraints for Frontier Agent
-        const maxCountExceeded = this.gpuSystem.getFrontierAgentMirrors().length >= 10;
-        const duplicateLabel = existingLabels.has(label);
-
-        // If constraints violated, spawn as Ecosystem agent instead
-        if (maxCountExceeded || duplicateLabel) {
-          const ecosystemAgent: AgentSpawnData = {
-            // Position and Velocity
-            x: sourcePosition.x,
-            y: sourcePosition.y,
-            vx: vx,
-            vy: vy,
-            // Target (for the CPU mirror)
-            targetClusterX: targetPosition.centerX,
-            targetClusterY: targetPosition.centerY,
-            // Lifespan
-            age: 0,
-            maxAge: this.AGENT_LIFESPAN,
-            // Hierarchy
-            isFrontier: false,
-            brightness: this.ECOSYSTEM_BRIGHTNESS,
-            // Visuals & UI
-            clusterHue: clusterHue,
-            label: undefined,
-            sourceClusterId: frontierBridge.source_cluster,
-            targetClusterId: frontierBridge.target_cluster
-          };
-
-          allSpawnData.push(ecosystemAgent);
-        } else {
-          const frontierAgent: AgentSpawnData = {
-            // Position and Velocity
-            x: sourcePosition.x,
-            y: sourcePosition.y,
-            vx: vx,
-            vy: vy,
-            // Target (for the CPU mirror)
-            targetClusterX: targetPosition.centerX,
-            targetClusterY: targetPosition.centerY,
-            // Lifespan
-            age: 0,
-            maxAge: this.AGENT_LIFESPAN,
-            // Hierarchy
-            isFrontier: true,
-            brightness: this.FRONTIER_BRIGHTNESS,
-            // Visuals & UI
-            clusterHue: clusterHue,
-            label: label,
-            sourceClusterId: frontierBridge.source_cluster,
-            targetClusterId: frontierBridge.target_cluster
-          };
-
-          allSpawnData.push(frontierAgent);
-        }
-      }
+      if (agentData) allSpawnData.push(agentData);
     }
 
+    // Process all Ecosystem Agents
     for (const bridge of ecosystemBridges) {
-      // Look up the source project's position
-      const sourcePosition = projectScreenPositions.get(bridge.project_id.toString());
+      const agentData = this.buildAgentData(
+        bridge,
+        false, // Ecosystem bridges can not be Frontier agents
+        projectScreenPositions,
+        clusterCentroids
+      );
 
-      // Look up the target cluster's centroid position
-      const targetPosition = clusterCentroids.get(bridge.target_cluster);
-
-      if (sourcePosition && targetPosition) {
-        // Calculate velocity vector pointing from source project to target cluster
-        const dx = targetPosition.centerX - sourcePosition.x;
-        const dy = targetPosition.centerY - sourcePosition.y;
-        const distance = Math.hypot(dx, dy) || 1; // Avoid division by zero
-
-        // Normalize and scale by agent speed
-        const vx = (dx / distance) * this.AGENT_SPEED;
-        const vy = (dy / distance) * this.AGENT_SPEED;
-
-        // Calculate cluster hue for trail coloring
-        const clusterHue = (bridge.source_cluster * 137.508) % 360;
-
-        // Create ecosystem agent spawn data (no label needed)
-        const ecosystemAgent: AgentSpawnData = {
-          // Position and Velocity
-          x: sourcePosition.x,
-          y: sourcePosition.y,
-          vx: vx,
-          vy: vy,
-          // Target (still needed for potential future debugging or different mirror types)
-          targetClusterX: targetPosition.centerX,
-          targetClusterY: targetPosition.centerY,
-          // Lifespan
-          age: 0,
-          maxAge: this.AGENT_LIFESPAN,
-          // Hierarchy
-          isFrontier: false,
-          brightness: this.ECOSYSTEM_BRIGHTNESS,
-          // Visuals & UI
-          clusterHue: clusterHue,
-          label: undefined, // Explicitly undefined
-          sourceClusterId: bridge.source_cluster,
-          targetClusterId: bridge.target_cluster
-        };
-
-        allSpawnData.push(ecosystemAgent);
-      }
+      if (agentData) allSpawnData.push(agentData);
     }
+    // Return all collected spawn data
     return allSpawnData;
   }
 
+  // TODO: Implement cleanup logic for Frontier agents
   // Clean up frontier agent tracking when agents die
   private cleanupFrontierAgents(): void {
 

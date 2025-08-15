@@ -1,13 +1,12 @@
 import { GPUSystem } from './systems/GPUSystem';
 import { TrailSystem } from './systems/TrailSystem';
 import { ParticleSystem } from './systems/ParticleSystem';
-import { Controls, type ControlCallbacks } from './ui/Controls';
 import { DOMUpdater } from './ui/DOMUpdater';
 import { Simulation } from './simulation';
 import { Renderer } from './renderer'; // New import
 import { loadBridgeData, loadData } from './data/loader';
-import type { ClusteredData } from './data/interfaces';
-import type { Bridge } from './types/interfaces';
+import type { ClusteredData, Bridge } from './data/interfaces';
+import { Ledger } from './ui/Ledger';
 
 
 export class SemanticGarden {
@@ -30,13 +29,13 @@ export class SemanticGarden {
   private domUpdater: DOMUpdater;
 
   // Animation state
-  private isPlaying: boolean = false;
+  private isPlaying: boolean = true;
   private speed: number = 1;
   private animationId: number | null = null;
   private showParticles: boolean = true;
   private data: ClusteredData | null = null;
-  private ledger: any;
-  private bridgeData: Bridge[];
+  private ledger: Ledger;
+  private bridgeData: Bridge[] = [];
 
   constructor() {
     this.canvas = document.getElementById('canvas') as HTMLCanvasElement;
@@ -54,8 +53,8 @@ export class SemanticGarden {
     // Initialize systems that depend on data
     this.particleSystem = new ParticleSystem(this.width, this.height);
     this.particleSystem.initialize(this.data!);
-    
-    this.gpuSystem = new GPUSystem(this.gl, this.particleSystem, this.width, this.height, 1024);
+
+    this.gpuSystem = new GPUSystem(this.gl, this.width, this.height, 1024);
     this.trailSystem = new TrailSystem(this.gl, this.width, this.height);
 
     // Initialize simulation and renderer after all systems are ready
@@ -76,6 +75,17 @@ export class SemanticGarden {
       this.height
     );
 
+    this.ledger = new Ledger({
+      onPlayPause: (isPlaying) => {
+        this.isPlaying = isPlaying;
+        isPlaying ? this.startAnimation() : this.stopAnimation();
+      },
+      onSpeedChange: (speed) => this.speed = speed
+    });
+
+    // Change theme colors
+    this.ledger.setAccentColor('#ff6b35', '#ff8c69'); // Orange theme
+
     window.addEventListener('resize', () => this.handleResize());
 
     // Start the render loop
@@ -83,13 +93,17 @@ export class SemanticGarden {
   }
 
   private setupCanvas(): void {
-    this.width = window.innerWidth;
-    this.height = window.innerHeight;
+    const canvasBounds = this.canvas.getBoundingClientRect();
 
+    this.width = canvasBounds.width;
+    this.height = canvasBounds.height;
+
+    // Set both the drawing buffer size and the display size
     this.canvas.width = this.width;
     this.canvas.height = this.height;
-    this.canvas.style.width = this.width + 'px';
-    this.canvas.style.height = this.height + 'px';
+    this.canvas.style.width = `${this.width}px`;
+    this.canvas.style.height = `${this.height}px`;
+
   }
 
   private async initializeWebGL(): Promise<void> {
@@ -97,22 +111,13 @@ export class SemanticGarden {
 
     const gl = this.canvas.getContext('webgl2');
 
-    if (!gl) {
-      throw new Error('WebGL 2.0 context creation failed - WebGL 2.0 required for PBO support');
-    }
+    if (!gl) throw new Error('WebGL 2.0 context creation failed - WebGL 2.0 required for PBO support');
 
     this.gl = gl;
 
-    console.log('➡️ Requesting EXT_color_buffer_float extension...');
     const ext = this.gl.getExtension('EXT_color_buffer_float');
-    if (!ext) {
-      // If the browser doesn't support this, we cannot proceed with GPGPU.
-      // This is a fatal error for our architecture.
-      throw new Error('Unsupported hardware: EXT_color_buffer_float is not available.');
-    }
-    console.log('✅ EXT_color_buffer_float extension enabled.');
+    if (!ext) throw new Error('Unsupported hardware: EXT_color_buffer_float is not available.');
 
-    console.log('✅ WebGL context created successfully');
     console.log('📊 WebGL Info:', {
       version: this.gl.getParameter(this.gl.VERSION),
       vendor: this.gl.getParameter(this.gl.VENDOR),
@@ -120,27 +125,6 @@ export class SemanticGarden {
     });
 
     document.getElementById('rendererInfo')!.textContent = 'WebGL';
-  }
-
-  private setupControls(): void {
-    const callbacks: ControlCallbacks = {
-      onPlayPause: (isPlaying) => {
-        this.isPlaying = isPlaying;
-        if (this.isPlaying) {
-          this.startAnimation();
-        } else {
-          this.stopAnimation();
-        }
-      },
-      onSpeedChange: (speed) => {
-        this.speed = speed;
-      },
-      onParticleToggle: (showParticles) => {
-        this.showParticles = showParticles;
-      }
-    };
-
-    new Controls(callbacks);
   }
 
   private async loadApplicationData(): Promise<void> {
@@ -157,26 +141,25 @@ export class SemanticGarden {
   private handleResize(): void {
     this.setupCanvas();
 
-    this.trailSystem.resize(this.width, this.height);
+    // Propagate the new dimensions to all systems
     this.gl.viewport(0, 0, this.width, this.height);
-
-    if (this.particleSystem && this.data) {
-      this.particleSystem.resize(this.width, this.height, this.data);
-    }
+    this.trailSystem.resize(this.width, this.height);
+    // this.gpuSystem.resize(this.width, this.height); // You may need to add a resize method here
+    this.particleSystem.resize(this.width, this.height, this.data!);
     this.simulation.resize(this.width, this.height);
-    this.renderer.resize(this.width, this.height); // Notify renderer of resize
+    this.renderer.resize(this.width, this.height);
   }
 
   private render(): void {
     this.simulation.update();
 
     this.gpuSystem.update(this.trailSystem.getTrailTexture());
-    this.gpuSystem.updateFrontierMirrors();
+    const clusterCentroids = this.particleSystem.getClusters();
+    this.gpuSystem.updateFrontierMirrors(clusterCentroids);
 
     this.trailSystem.update(
       this.gpuSystem.getAgentStateTexture(),
       this.gpuSystem.getAgentPropertiesTexture(),
-      this.gpuSystem.getAgentExtendedTexture(),
       this.gpuSystem.getAgentTextureSize(),
       this.gpuSystem.getActiveAgentCount()
     );
@@ -196,6 +179,7 @@ export class SemanticGarden {
       activeClusters: this.particleSystem.getActiveClusters().length,
       activeAgents: this.gpuSystem.getActiveAgentCount()
     });
+    this.ledger.update(this.gpuSystem.getFrontierAgentMirrors(), this.simulation.currentYear);
   }
 
   private animate(): void {

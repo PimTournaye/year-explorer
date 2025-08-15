@@ -72,7 +72,8 @@ export interface AgentSpawnData {
   // Label data (only used for Frontier agents)
   sourceClusterId?: number;
   targetClusterId?: number;
-  label?: string; // Narrative label like "seeking: privacy projects"
+  directive_verb?: string; // e.g., "seeking", "pondering"
+  directive_noun?: string; // e.g., "social engines"
 }
 
 // CPU Mirror for Frontier agents (for label rendering)
@@ -86,7 +87,8 @@ export interface FrontierAgentMirror {
   maxAge: number;
   sourceClusterId: number;
   targetClusterId: number;
-  label: string;
+  directive_verb: string; // e.g., "seeking", "pondering"
+  directive_noun: string; // e.g., "social engines"
   isActive: boolean;
 }
 

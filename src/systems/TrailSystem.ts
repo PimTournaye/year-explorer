@@ -121,8 +121,8 @@ export class TrailSystem {
     };
   }
 
-  public update(agentStateTexture: WebGLTexture, agentPropertiesTexture: WebGLTexture, agentExtendedTexture: WebGLTexture, agentTextureSize: number, activeAgentCount: number): void {
-    const gl = this.gl;
+  public update(agentStateTexture: WebGLTexture, agentPropertiesTexture: WebGLTexture, agentTextureSize: number, activeAgentCount: number): void {
+    const gl = this.gl;``
     gl.viewport(0, 0, this.width, this.height);
 
 
@@ -130,7 +130,7 @@ export class TrailSystem {
     this.updateTrails();
 
     // Pass 2: Agent trail deposition (from GPU state)
-    this.depositAgentTrails(agentStateTexture, agentPropertiesTexture, agentExtendedTexture, agentTextureSize, activeAgentCount);
+    this.depositAgentTrails(agentStateTexture, agentPropertiesTexture, agentTextureSize, activeAgentCount);
   }
 
   private updateTrails(): void {
@@ -154,7 +154,7 @@ export class TrailSystem {
     this.currentTrailSourceIndex = destinationIndex as 0 | 1;
   }
 
-  private depositAgentTrails(agentStateTexture: WebGLTexture, agentPropertiesTexture: WebGLTexture, agentExtendedTexture: WebGLTexture, agentTextureSize: number, activeAgentCount: number): void {
+  private depositAgentTrails(agentStateTexture: WebGLTexture, agentPropertiesTexture: WebGLTexture, agentTextureSize: number, activeAgentCount: number): void {
     const gl = this.gl;
     
     
@@ -178,11 +178,6 @@ export class TrailSystem {
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, agentPropertiesTexture);
     gl.uniform1i(this.depositionUniforms.uAgentPropertiesTexture!, 2);
-    
-    // Bind agent extended texture (for cluster colors)
-    gl.activeTexture(gl.TEXTURE3);
-    gl.bindTexture(gl.TEXTURE_2D, agentExtendedTexture);
-    gl.uniform1i(this.depositionUniforms.uAgentExtendedTexture!, 3);
     
     // Set uniforms
     gl.uniform1f(this.depositionUniforms.uAgentTextureSize!, agentTextureSize);

@@ -11,7 +11,7 @@ export class Ledger {
   private accentColorBright: string = '#1a1919f'; // Brighter version for highlights
   
   // Configuration
-  private showDebugControls: boolean = true; // Set to false to hide debug controls
+  private showDebugControls: boolean = false; // Set to false to hide debug controls
   private showLifespanProgress: boolean = false; // Set to false to hide lifespan progress bars
   
   private container!: HTMLDivElement;

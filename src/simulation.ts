@@ -355,8 +355,12 @@ export class Simulation {
     }
 
     let maxAge: number;
-    (isFrontier) ? maxAge = this.FRONTIER_LIFESPAN_MIN + Math.random() * (this.FRONTIER_LIFESPAN_MAX - this.FRONTIER_LIFESPAN_MIN)
-      : maxAge = this.ECOSYSTEM_LIFESPAN_MIN + Math.random() * (this.ECOSYSTEM_LIFESPAN_MAX - this.ECOSYSTEM_LIFESPAN_MIN);
+    if (isFrontier) {
+      maxAge = this.FRONTIER_LIFESPAN_MIN + Math.random() * (this.FRONTIER_LIFESPAN_MAX - this.FRONTIER_LIFESPAN_MIN);
+      console.log(`🎯 Creating Frontier agent with maxAge: ${Math.round(maxAge)} frames (${Math.round(maxAge/60)} seconds)`);
+    } else {
+      maxAge = this.ECOSYSTEM_LIFESPAN_MIN + Math.random() * (this.ECOSYSTEM_LIFESPAN_MAX - this.ECOSYSTEM_LIFESPAN_MIN);
+    }
 
     return {
       x: sourcePosition.x,

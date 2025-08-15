@@ -32,3 +32,34 @@
 
 ## Performance (Low Priority):
 - The idea of updating the trail map every other frame is noted as a potential optimization, but will be shelved unless performance becomes an issue after the primary fixes are implemented.
+
+
+
+
+
+
+
+
+Trail System 🌊
+
+  - src/systems/TrailSystem.ts:
+    - Lines 29-30: DECAY_FACTOR (how fast trails fade), TRAIL_STRENGTH (intensity)
+  - src/shaders/agentDeposition.frag:
+    - Line 52: smoothstep(25.,0.,dist) (trail radius), *0.3 (strength multiplier)
+    - Line 59: .3,.9 (color saturation, brightness)
+
+  Agent Visuals 🎯
+
+  - src/systems/GPUSystem.ts: Agent rendering, colors, sizes
+  - src/shaders/agentRender.frag: Agent appearance on canvas
+
+  Particle System ✨
+
+  - src/systems/ParticleSystem.ts: Cluster visualization, project particles
+  - Canvas overlay rendering (not WebGL)
+
+  UI & Colors 🎨
+
+  - src/ui/Ledger.ts: Ledger styling, fonts, colors
+  - public/styles.css: Overall theme colors
+  - src/simulation.ts Line 22: PROTAGONIST_COLORS array

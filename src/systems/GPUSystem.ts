@@ -253,6 +253,8 @@ export class GPUSystem {
     for (const [index, agent] of this.activeAgents.entries()) {
       agent.age++;
       if (agent.age > agent.maxAge) {
+        const isFrontier = this.frontierAgentMirrors.has(index);
+        console.log(`💀 Agent ${index} died: age=${agent.age}, maxAge=${agent.maxAge}, frontier=${isFrontier}`);
         deadAgentIndices.push(index);
       }
     }

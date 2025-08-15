@@ -89,7 +89,7 @@ export class SemanticGarden {
     window.addEventListener('resize', () => this.handleResize());
 
     // Start the render loop
-    this.render();
+    this.animate();
   }
 
   private setupCanvas(): void {

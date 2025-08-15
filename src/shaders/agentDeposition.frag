@@ -49,7 +49,7 @@ void main(){
       if(isFrontier>.5){
         float dist=length(worldPos-agentPos);
         // Slime mold-like trails: smaller radius, moderate strength
-        float influence=smoothstep(25.,0.,dist)*u_trailStrength*0.3; // Smaller and weaker than original
+        float influence=smoothstep(12.,1.,dist)*u_trailStrength*0.3; // Smaller and weaker than original
         
         brightnessDeposit+=influence;
         

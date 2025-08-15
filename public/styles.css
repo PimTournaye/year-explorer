@@ -48,6 +48,11 @@ body {
   font-size: 12px;
 }
 
+.hidden {
+  display: none;
+}
+
+
 .warning {
   color: #ecb92e;
   font-weight: bold;

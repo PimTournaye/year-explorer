@@ -39,7 +39,7 @@ export class Simulation {
   private readonly W_BRIDGE_BUILDING = 0.5;
 
   // Agent configuration
-  private readonly AGENT_SPEED = 1.5;
+  private readonly AGENT_SPEED = 2.0; // Base speed for agents
   private readonly MAX_TOTAL_AGENTS = 350;
   private readonly MAX_AGENTS_PER_FRAME = 10;
   private readonly MIN_SPAWN_SIMILARITY = 0.68; // Minimum similarity score to consider spawning an agent, CAN TWEAK THIS

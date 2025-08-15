@@ -299,10 +299,10 @@ export class GPUSystem {
     // Set uniforms for agent behavior (slower for contemplative pacing)
     gl.uniform2f(this.agentUpdateUniforms.uCanvasSize!, this.width, this.height);
     gl.uniform1f(this.agentUpdateUniforms.uAgentTextureSize!, this.agentTextureSize);
-    gl.uniform1f(this.agentUpdateUniforms.uDeltaTime!, 0.3); // Much slower simulation
-    gl.uniform1f(this.agentUpdateUniforms.uAgentSpeed!, 0.8); // Much slower movement
+    gl.uniform1f(this.agentUpdateUniforms.uDeltaTime!, 0.5); // Much slower simulation
+    gl.uniform1f(this.agentUpdateUniforms.uAgentSpeed!, 1); // Much slower movement
     gl.uniform1f(this.agentUpdateUniforms.uSensorDistance!, 15.0);
-    gl.uniform1f(this.agentUpdateUniforms.uSensorAngle!, Math.PI / 4);
+    gl.uniform1f(this.agentUpdateUniforms.uSensorAngle!, Math.PI / 3);
     gl.uniform1f(this.agentUpdateUniforms.uTurnStrength!, 0.1); // Effective organic steering
 
     // Process agent state update

@@ -109,6 +109,11 @@ export class SemanticGarden {
     // Change theme colors
     this.ledger.setAccentColor('#ff6b35', '#ff8c69'); // Orange theme
 
+    // Listen for ledger orientation changes to adjust canvas margins
+    window.addEventListener('ledgerOrientationChange', () => {
+      this.handleLedgerOrientationChange();
+    });
+
     window.addEventListener('resize', () => this.handleResize());
 
     // Start the animation loop
@@ -116,17 +121,25 @@ export class SemanticGarden {
   }
 
   private setupCanvas(): void {
-    const canvasBounds = this.canvas.getBoundingClientRect();
+    // Calculate available space based on current ledger state
+    const ledgerOrientation = window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
+    let availableWidth = window.innerWidth;
+    let availableHeight = window.innerHeight;
+    
+    if (ledgerOrientation === 'landscape') {
+      availableWidth -= 400; // Subtract ledger width
+    } else {
+      availableHeight -= 320; // Subtract ledger height
+    }
 
-    this.width = canvasBounds.width;
-    this.height = canvasBounds.height;
+    this.width = availableWidth;
+    this.height = availableHeight;
 
     // Set both the drawing buffer size and the display size
     this.canvas.width = this.width;
     this.canvas.height = this.height;
     this.canvas.style.width = `${this.width}px`;
     this.canvas.style.height = `${this.height}px`;
-
   }
 
   private async initializeWebGL(): Promise<void> {
@@ -175,6 +188,11 @@ export class SemanticGarden {
     this.particleSystem.resize(this.width, this.height, this.data!);
     this.simulation.resize(this.width, this.height);
     this.renderer.resize(this.width, this.height);
+  }
+
+  private handleLedgerOrientationChange(): void {
+    // Just trigger a resize to recalculate canvas dimensions
+    this.handleResize();
   }
 
   private updateUI(): void {

@@ -21,19 +21,85 @@ export class Ledger {
   private controlsPanel!: HTMLDivElement;
   private agentElements: Map<number, HTMLDivElement> = new Map();
   private callbacks: LedgerCallbacks;
+  
+  // Responsive layout properties
+  private currentOrientation: 'landscape' | 'portrait' = 'landscape';
+  private resizeTimeout: number | null = null;
 
   constructor(callbacks: LedgerCallbacks) {
     this.callbacks = callbacks;
+    this.currentOrientation = this.detectOrientation();
     this.createStructure();
     this.injectStyles();
     this.setupEventListeners();
+  }
+
+  private detectOrientation(): 'landscape' | 'portrait' {
+    return window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
+  }
+
+  private handleOrientationChange(): void {
+    const newOrientation = this.detectOrientation();
+    if (newOrientation !== this.currentOrientation) {
+      this.currentOrientation = newOrientation;
+      this.updateLayout();
+      this.notifyCanvasOfLayoutChange();
+    }
+  }
+
+  private updateLayout(): void {
+    this.container.className = `ledger ${this.currentOrientation}`;
+    
+    // Update agents container structure based on orientation
+    if (this.currentOrientation === 'portrait') {
+      this.setupPortraitLayout();
+    } else {
+      this.setupLandscapeLayout();
+    }
+  }
+
+  private setupPortraitLayout(): void {
+    // Ensure body has proper structure for portrait
+    const agentsContainer = this.body.querySelector('.agents-container') || this.createAgentsContainer();
+    if (!agentsContainer.parentElement) {
+      this.body.appendChild(agentsContainer);
+    }
+  }
+
+  private setupLandscapeLayout(): void {
+    // Ensure body structure is correct for landscape
+    const agentsContainer = this.body.querySelector('.agents-container');
+    if (agentsContainer && agentsContainer.parentElement === this.body) {
+      // Move existing agent cards back to body directly
+      const cards = Array.from(agentsContainer.children);
+      cards.forEach(card => this.body.appendChild(card));
+      agentsContainer.remove();
+    }
+  }
+
+  private createAgentsContainer(): HTMLDivElement {
+    const container = document.createElement('div');
+    container.className = 'agents-container';
+    return container;
+  }
+
+  private notifyCanvasOfLayoutChange(): void {
+    // Dispatch custom event to notify the canvas about layout changes
+    const event = new CustomEvent('ledgerOrientationChange', {
+      detail: {
+        orientation: this.currentOrientation,
+        landscapeMargin: '400px',
+        portraitMargin: '320px'
+      }
+    });
+    window.dispatchEvent(event);
   }
 
   private createStructure(): void {
     // 1. Create the main container
     this.container = document.createElement('div');
     this.container.id = 'ledger';
-    this.container.className = 'ledger-sidebar';
+    this.container.className = `ledger ${this.currentOrientation}`;
 
     // 2. Create the header
     this.header = document.createElement('div');
@@ -94,7 +160,20 @@ export class Ledger {
   }
 
   private setupEventListeners(): void {
-    // Any additional event listeners can go here
+    // Debounced resize handler
+    window.addEventListener('resize', () => {
+      if (this.resizeTimeout) {
+        clearTimeout(this.resizeTimeout);
+      }
+      this.resizeTimeout = window.setTimeout(() => {
+        this.handleOrientationChange();
+      }, 100);
+    });
+
+    // Orientation change handler (for mobile devices)
+    window.addEventListener('orientationchange', () => {
+      setTimeout(() => this.handleOrientationChange(), 100);
+    });
   }
 
   public update(mirrors: FrontierAgentMirror[], currentYear: number): void {
@@ -124,10 +203,31 @@ export class Ledger {
         // Agent is new, create and spawn with animation
         element = this.createLedgerEntryElement(agent);
         this.spawnAgent(element, agent.id);
+      } else {
+        // Check if we need to recreate the element due to orientation change
+        const needsRecreate = this.shouldRecreateElement(element);
+        if (needsRecreate) {
+          // Remove old element and create new one
+          element.remove();
+          this.agentElements.delete(agent.id);
+          element = this.createLedgerEntryElement(agent);
+          this.spawnAgent(element, agent.id);
+        }
       }
 
       // Update ONLY the parts that change every frame (progress bar)
       this.updateAgentProgress(element, agent);
+    }
+  }
+
+  private shouldRecreateElement(element: HTMLDivElement): boolean {
+    // Check if element structure matches current orientation
+    if (this.currentOrientation === 'portrait') {
+      // In portrait, we should NOT have agent-row
+      return element.querySelector('.agent-row') !== null;
+    } else {
+      // In landscape, we SHOULD have agent-row
+      return element.querySelector('.agent-row') === null;
     }
   }
 
@@ -139,56 +239,89 @@ export class Ledger {
     element.style.borderLeftColor = agent.sourceClusterColor;
     element.style.setProperty('--cluster-color', agent.sourceClusterColor);
 
-    // Create single row container with 4 columns: ID - Directive - Status - Pathway
-    const agentRow = document.createElement('div');
-    agentRow.className = 'agent-row';
+    if (this.currentOrientation === 'portrait') {
+      // Simplified structure for portrait mode
+      const agentId = document.createElement('div');
+      agentId.className = 'agent-id';
+      agentId.textContent = agent.projectTitle;
 
-    // Column 1: ID (Project Title)
-    const agentId = document.createElement('div');
-    agentId.className = 'agent-id';
-    agentId.textContent = agent.projectTitle;
+      const agentDirective = document.createElement('div');
+      agentDirective.className = 'agent-directive';
+      agentDirective.textContent = `${agent.directive_verb}: ${agent.directive_noun}`;
 
-    // Column 2: Directive
-    const agentDirective = document.createElement('div');
-    agentDirective.className = 'agent-directive';
-    agentDirective.textContent = `${agent.directive_verb}: ${agent.directive_noun}`;
+      const agentPathway = document.createElement('div');
+      agentPathway.className = 'agent-pathway';
+      agentPathway.innerHTML = `CLUSTER_${agent.sourceClusterId.toString().padStart(2, '0')} <span class="pathway-arrow">→</span> CLUSTER_${agent.targetClusterId.toString().padStart(2, '0')}`;
 
-    // Column 3: Status (Cluster Name)
-    const agentStatus = document.createElement('div');
-    agentStatus.className = 'agent-status';
-    agentStatus.textContent = agent.sourceClusterName;
-    agentStatus.style.backgroundColor = agent.sourceClusterColor;
+      element.append(agentId, agentDirective, agentPathway);
 
-    // Column 4: Pathway
-    const agentPathway = document.createElement('div');
-    agentPathway.className = 'agent-pathway';
-    agentPathway.innerHTML = `CLUSTER_${agent.sourceClusterId.toString().padStart(2, '0')} <span class="pathway-arrow">→</span> CLUSTER_${agent.targetClusterId.toString().padStart(2, '0')}`;
+      if (this.showLifespanProgress) {
+        const agentProgress = document.createElement('div');
+        agentProgress.className = 'agent-progress';
 
-    agentRow.append(agentId, agentDirective, agentStatus, agentPathway);
+        const progressBarContainer = document.createElement('div');
+        progressBarContainer.className = 'progress-bar-container';
 
-    if (this.showLifespanProgress) {
-      const agentProgress = document.createElement('div');
-      agentProgress.className = 'agent-progress';
+        const progressBar = document.createElement('div');
+        progressBar.className = 'progress-bar';
 
-      const progressLabel = document.createElement('div');
-      progressLabel.className = 'progress-label';
-      progressLabel.textContent = 'Lifespan Progress';
-
-      const progressBarContainer = document.createElement('div');
-      progressBarContainer.className = 'progress-bar-container';
-
-      const progressBar = document.createElement('div');
-      progressBar.className = 'progress-bar';
-
-      const progressText = document.createElement('div');
-      progressText.className = 'progress-text';
-
-      progressBarContainer.appendChild(progressBar);
-      agentProgress.append(progressLabel, progressBarContainer, progressText);
-
-      element.append(agentRow, agentProgress);
+        progressBarContainer.appendChild(progressBar);
+        agentProgress.appendChild(progressBarContainer);
+        element.appendChild(agentProgress);
+      }
     } else {
-      element.append(agentRow);
+      // Full structure for landscape mode (existing behavior)
+      // Create single row container with 4 columns: ID - Directive - Status - Pathway
+      const agentRow = document.createElement('div');
+      agentRow.className = 'agent-row';
+
+      // Column 1: ID (Project Title)
+      const agentId = document.createElement('div');
+      agentId.className = 'agent-id';
+      agentId.textContent = agent.projectTitle;
+
+      // Column 2: Directive
+      const agentDirective = document.createElement('div');
+      agentDirective.className = 'agent-directive';
+      agentDirective.textContent = `${agent.directive_verb}: ${agent.directive_noun}`;
+
+      // Column 3: Status (Cluster Name)
+      const agentStatus = document.createElement('div');
+      agentStatus.className = 'agent-status';
+      agentStatus.textContent = agent.sourceClusterName;
+      agentStatus.style.backgroundColor = agent.sourceClusterColor;
+
+      // Column 4: Pathway
+      const agentPathway = document.createElement('div');
+      agentPathway.className = 'agent-pathway';
+      agentPathway.innerHTML = `CLUSTER_${agent.sourceClusterId.toString().padStart(2, '0')} <span class="pathway-arrow">→</span> CLUSTER_${agent.targetClusterId.toString().padStart(2, '0')}`;
+
+      agentRow.append(agentId, agentDirective, agentStatus, agentPathway);
+
+      if (this.showLifespanProgress) {
+        const agentProgress = document.createElement('div');
+        agentProgress.className = 'agent-progress';
+
+        const progressLabel = document.createElement('div');
+        progressLabel.className = 'progress-label';
+        progressLabel.textContent = 'Lifespan Progress';
+
+        const progressBarContainer = document.createElement('div');
+        progressBarContainer.className = 'progress-bar-container';
+
+        const progressBar = document.createElement('div');
+        progressBar.className = 'progress-bar';
+
+        const progressText = document.createElement('div');
+        progressText.className = 'progress-text';
+
+        progressBarContainer.appendChild(progressBar);
+        agentProgress.append(progressLabel, progressBarContainer, progressText);
+
+        element.append(agentRow, agentProgress);
+      } else {
+        element.append(agentRow);
+      }
     }
 
     return element;
@@ -211,8 +344,17 @@ export class Ledger {
     // Add spawning animation class
     element.classList.add('spawning');
     
-    // Insert into DOM
-    this.body.appendChild(element);
+    // Insert into appropriate container based on orientation
+    if (this.currentOrientation === 'portrait') {
+      const agentsContainer = this.body.querySelector('.agents-container') || this.createAgentsContainer();
+      if (!agentsContainer.parentElement) {
+        this.body.appendChild(agentsContainer);
+      }
+      agentsContainer.appendChild(element);
+    } else {
+      this.body.appendChild(element);
+    }
+    
     this.agentElements.set(agentId, element);
     
     // Trigger animation after DOM insertion
@@ -240,44 +382,86 @@ export class Ledger {
     style.textContent = `
       @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
       
-      .ledger-sidebar {
+      /* Base ledger styles */
+      .ledger {
         position: fixed;
-        top: 0;
-        right: 0;
-        width: 400px;
-        height: 100vh;
         background: linear-gradient(180deg, #ffffff 0%, #f8f8f8 100%);
-        border-left: 3px solid #080808;
         display: flex;
-        flex-direction: column;
         box-shadow: -5px 0 20px rgba(0,0,0,0.1);
         font-family: 'JetBrains Mono', monospace;
         color: #2a2a2a;
         z-index: 1000;
+        transition: all 0.3s ease;
       }
       
+      /* Landscape mode (sidebar) */
+      .ledger.landscape {
+        top: 0;
+        right: 0;
+        width: 400px;
+        height: 100vh;
+        flex-direction: column;
+        border-left: 3px solid ${this.accentColor};
+      }
+      
+      /* Portrait mode (bottom panel) */
+      .ledger.portrait {
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 320px;
+        max-height: 40vh;
+        flex-direction: row;
+        border-top: 3px solid ${this.accentColor};
+        border-left: none;
+        box-shadow: 0 -5px 20px rgba(0,0,0,0.1);
+      }
+      
+      /* Header styles */
       .ledger-header {
         background: linear-gradient(135deg, #f5f5f5, #eeeeee);
         border-bottom: 2px solid ${this.accentColor};
-        padding: 24px 16px 16px 16px;
         position: relative;
+      }
+      
+      .ledger.landscape .ledger-header {
+        padding: 24px 16px 16px 16px;
+      }
+      
+      .ledger.portrait .ledger-header {
+        min-width: 180px;
+        max-width: 200px;
+        padding: 16px 12px;
+        border-right: 2px solid ${this.accentColor};
+        border-bottom: none;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
       }
       
       .ledger-header::before {
         content: '';
         position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
         height: 2px;
         background: linear-gradient(90deg, ${this.accentColor}, ${this.accentColorBright}, ${this.accentColor});
       }
       
+      .ledger.landscape .ledger-header::before {
+        top: 0;
+        left: 0;
+        right: 0;
+      }
+      
+      .ledger.portrait .ledger-header::before {
+        top: 0;
+        left: 0;
+        right: 0;
+      }
+      
+      /* Year display */
       .year-display {
-        font-size: 100px;
         font-weight: 700;
         color: #1a1a1a;
-        margin-bottom: 20px;
         text-shadow: 0 0 20px rgba(184, 134, 11, 0.3);
         letter-spacing: 3px;
         text-align: center;
@@ -287,11 +471,28 @@ export class Ledger {
         -webkit-text-fill-color: transparent;
       }
       
+      .ledger.landscape .year-display {
+        font-size: 100px;
+        margin-bottom: 20px;
+      }
+      
+      .ledger.portrait .year-display {
+        font-size: 32px;
+        margin-bottom: 12px;
+      }
+      
+      /* Controls panel */
       .controls-panel {
         display: flex;
         gap: 12px;
         align-items: center;
         margin-top: 8px;
+      }
+      
+      .ledger.portrait .controls-panel {
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 4px;
       }
       
       .control-btn {
@@ -300,10 +501,19 @@ export class Ledger {
         color: #2a2a2a;
         font-family: inherit;
         font-size: 16px;
-        width: 44px;
-        height: 44px;
         cursor: pointer;
         transition: all 0.2s ease;
+      }
+      
+      .ledger.landscape .control-btn {
+        width: 44px;
+        height: 44px;
+      }
+      
+      .ledger.portrait .control-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 14px;
       }
       
       .control-btn.playing {
@@ -314,7 +524,15 @@ export class Ledger {
       
       .speed-control {
         flex: 1;
+      }
+      
+      .ledger.landscape .speed-control {
         margin-left: 8px;
+      }
+      
+      .ledger.portrait .speed-control {
+        margin-left: 0;
+        width: 100%;
       }
       
       .speed-label {
@@ -353,11 +571,28 @@ export class Ledger {
         box-shadow: 0 0 8px rgba(184, 134, 11, 0.4);
       }
       
+      /* Body styles */
       .ledger-body {
         flex: 1;
         overflow-y: auto;
-        padding: 16px;
         background: linear-gradient(180deg, #fafafa, #f5f5f5);
+      }
+      
+      .ledger.landscape .ledger-body {
+        padding: 16px;
+      }
+      
+      .ledger.portrait .ledger-body {
+        padding: 12px;
+        overflow-x: hidden;
+      }
+      
+      /* Agents container for portrait mode */
+      .agents-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 12px;
+        padding: 0;
       }
       
       .agents-header {
@@ -370,17 +605,31 @@ export class Ledger {
         padding-bottom: 8px;
       }
       
+      /* Hide agents header in portrait mode */
+      .ledger.portrait .agents-header {
+        display: none;
+      }
+      
+      /* Agent card styles */
       .agent-card {
         background: linear-gradient(135deg, #ffffff, #f8f8f8);
         border: 1px solid #e0e0e0;
         border-left: 1px solid ${this.accentColor};
-        margin-bottom: 16px;
-        padding: 20px;
         border-radius: 0 4px 4px 0;
         position: relative;
         overflow: hidden;
         transition: all 0.3s ease;
         box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      }
+      
+      .ledger.landscape .agent-card {
+        margin-bottom: 16px;
+        padding: 20px;
+      }
+      
+      .ledger.portrait .agent-card {
+        padding: 12px;
+        height: auto;
       }
       
       .agent-card::before {
@@ -426,12 +675,22 @@ export class Ledger {
         margin-bottom: 4px;
       }
       
+      .ledger.portrait .agent-id {
+        font-size: 14px;
+        margin-bottom: 6px;
+      }
+      
       .agent-directive {
         font-size: 18px;
         color: #333;
         line-height: 1.4;
         font-weight: 500;
         margin-bottom: 2px;
+      }
+      
+      .ledger.portrait .agent-directive {
+        font-size: 16px;
+        margin-bottom: 8px;
       }
       
       .agent-status {
@@ -461,6 +720,10 @@ export class Ledger {
         font-weight: 500;
       }
       
+      .ledger.portrait .agent-pathway {
+        font-size: 12px;
+      }
+      
       .pathway-arrow {
         color: ${this.accentColor};
         margin: 0 4px;
@@ -468,6 +731,10 @@ export class Ledger {
       
       .agent-progress {
         margin-top: 10px;
+      }
+      
+      .ledger.portrait .agent-progress {
+        margin-top: 8px;
       }
       
       .progress-label {
@@ -485,6 +752,10 @@ export class Ledger {
         overflow: hidden;
         border: 1px solid #ddd;
         position: relative;
+      }
+      
+      .ledger.portrait .progress-bar-container {
+        height: 6px;
       }
       
       .progress-bar {
@@ -533,6 +804,13 @@ export class Ledger {
       .ledger-body::-webkit-scrollbar-thumb:hover {
         background: ${this.accentColorBright};
       }
+      
+      /* Responsive breakpoints */
+      @media (max-width: 480px) {
+        .ledger.portrait .agents-container {
+          grid-template-columns: 1fr;
+        }
+      }
     `;
     
     document.head.appendChild(style);
@@ -562,15 +840,31 @@ export class Ledger {
     this.showLifespanProgress = visible;
     // If hiding progress bars, we need to recreate existing agent cards
     // This is a simple approach - remove all and let them be recreated
-    if (!visible) {
-      this.agentElements.clear();
-      const agentCards = this.body.querySelectorAll('.agent-card');
-      agentCards.forEach(card => card.remove());
+    this.recreateAllAgentCards();
+  }
+
+  private recreateAllAgentCards(): void {
+    this.agentElements.clear();
+    const agentCards = this.body.querySelectorAll('.agent-card');
+    agentCards.forEach(card => card.remove());
+    
+    // Clear agents container if it exists
+    const agentsContainer = this.body.querySelector('.agents-container');
+    if (agentsContainer) {
+      agentsContainer.remove();
     }
   }
 
   // Public method to remove the ledger
   public destroy(): void {
+    // Clean up event listeners
+    window.removeEventListener('resize', this.handleOrientationChange);
+    window.removeEventListener('orientationchange', this.handleOrientationChange);
+    
+    if (this.resizeTimeout) {
+      clearTimeout(this.resizeTimeout);
+    }
+    
     this.container.remove();
     const style = document.getElementById('ledger-styles');
     if (style) {

@@ -424,7 +424,7 @@ export class Ledger {
       }
       
       .agent-id {
-        font-size: 24px;
+        font-size: 20px;
         font-weight: 700;
         color: #1a1a1a;
         letter-spacing: 0.5px;
